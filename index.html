@@ -11,7 +11,13 @@ header img{height:44px}header .t b{color:var(--r);font-size:19px;letter-spacing:
 header .sp{flex:1}.pill{padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600}.on{background:var(--g2);color:var(--g)}.off{background:#fdecea;color:var(--r)}
 nav{display:flex;gap:6px;overflow-x:auto;padding:8px 10px;background:var(--n)}nav button{background:transparent;color:#fff;border:0;padding:9px 13px;border-radius:8px;white-space:nowrap;font-size:14px;cursor:pointer}
 nav button.a{background:#fff;color:var(--n);font-weight:700}
-main{padding:14px;max-width:1200px;margin:auto}.card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
+main{padding:14px;max-width:1200px;margin:auto}
+.lgw{display:grid;grid-template-columns:1fr minmax(320px,390px) 1fr;gap:18px;align-items:start;margin:22px auto}.lgs{display:grid;gap:10px}.lgs h4{margin:0 0 2px;color:var(--n);font-size:15px}
+.lf{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid var(--bd);border-left:4px solid var(--g);border-radius:10px;padding:10px 12px}.lf span{font-size:22px;line-height:1}.lf b{display:block;color:var(--n);font-size:14px}.lf small{color:#6b7c75;font-size:12px}
+.uac{margin:12px 0 0;border:2px solid #14305c;text-align:center}.uab{display:flex;gap:12px;align-items:center;justify-content:center;text-align:left}.uab img{width:56px;height:56px;border-radius:12px}.uab small{display:block;color:#6b7c75;font-size:11px}.uab b{display:block;font-size:18px;color:#14305c}.uab span{font-size:13px;color:#333}
+.uaa{display:flex;gap:8px;margin:10px 0 6px}.uaa a{flex:1;text-decoration:none;color:#fff;background:#14305c;padding:9px;border-radius:8px;font-weight:700;font-size:14px}.uaa a+a{background:#0b7a3b}.uat{font-size:11px;color:#6b7c75}
+@media(max-width:900px){.lgw{grid-template-columns:1fr}.lgc{order:-1}.lgs{grid-template-columns:1fr 1fr}.lgs h4{grid-column:1/-1}.lgh2{display:none}}
+@media(max-width:480px){.lgs{grid-template-columns:1fr}}.card{background:#fff;border:1px solid var(--bd);border-radius:12px;padding:14px;margin-bottom:12px}
 h3{margin:0 0 10px;color:var(--n)}input,select{font:inherit;padding:9px 10px;border:1px solid #b9c7c1;border-radius:8px;width:100%;background:#fff}
 input:focus,select:focus{outline:2px solid var(--g);border-color:var(--g)}
 .row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}label{font-size:12px;color:#55665f;display:block}
