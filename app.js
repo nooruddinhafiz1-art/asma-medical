@@ -1,4 +1,4 @@
-const VER='0.9.5';
+const VER='0.9.6';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -157,7 +157,7 @@ function pBill(){
  $('#main').innerHTML=`<div class=card><h3>🧾 ${t('New Bill')} <span class=mut>No. ${(D.settings.series?D.settings.series+'-':'')+D.settings.billNo} · ${today()}</span></h3>
  <div class=row><label>${t('Customer')}<input id=bc value="${esc(B.cust)}" oninput="B.cust=this.value"></label><label>${t('Mobile')}<input id=bp value="${esc(B.phone)}" oninput="B.phone=this.value"></label><label>Doctor<input id=bdr value="${esc(B.dr||'')}" oninput="B.dr=this.value" placeholder="Dr. name (Rx)"></label><label>Buyer GSTIN <span class=mut>(B2B only)</span><input id=bgs maxlength=15 value="${esc(B.gstin||'')}" oninput="B.gstin=this.value.toUpperCase().trim()" placeholder="19ABCDE1234F1Z5" style="text-transform:uppercase"></label>
  <label>${t('Payment')}<select id=bpay onchange="B.pay=this.value">${['Cash','UPI','Card','Credit'].map(p=>`<option value=${p} ${B.pay==p?'selected':''}>${p=='Credit'?'Credit (udhaar)':p}</option>`).join('')}</select></label><label>${t('Discount %')}<input type=number id=bd value="${B.disc}" oninput="B.disc=+this.value||0;bDraw()"></label></div>
- <div class=dd style="margin-top:10px;display:flex;gap:6px"><button class=b title="Scan with phone camera" onclick="camScan(billScan)">📷</button><input id=bi style="flex:1" placeholder="Medicine name or scan barcode… (↑↓ then Enter)" oninput="bSug()" onkeydown="bKey(event)"><div class=list id=bl hidden></div></div></div>
+ <div class=dd style="margin-top:10px;display:flex;gap:6px"><button class=b title="Scan with phone camera" onclick="camScan(billScan)">📷</button><input id=bi autocomplete=off spellcheck=false style="flex:1" placeholder="Medicine name or scan barcode… (↑↓ then Enter)" oninput="bSug()" onkeydown="bKey(event)"><div class=list id=bl hidden></div></div></div>
  <div class="card tw" id=bt></div>
  ${lastBills()}<div class=card style="background:#14305c;color:#fff;font-size:13px"><b>⌨ Keyboard:</b> type name → <b>Enter</b> → qty → <b>Enter</b> → next medicine · empty box + <b>Enter</b> = Save & Print · <b>F10</b> Save & Print · <b>F9</b> Save only · <b>F11</b> WhatsApp · <b>Alt+C</b> Customer · <b>Alt+M</b> Mobile · <b>Alt+O</b> Doctor · <b>Alt+P</b> Payment · <b>Alt+D</b> Discount · qty <b>5</b> = 5 strips, <b>5L</b> = 5 loose tablets · <b>Ctrl+Del</b> remove last · <b>Esc</b> back to search · <b>Ctrl+P</b> reprint last bill · <b>Alt+R</b> reprint by bill no.<br>
  <b>Pages:</b> F1 Search · F2 New Bill · F3 Purchase · F4 Stock · F6 Expiry · F7 Order list · F8 Reports</div>`;bDraw();$('#bi').focus()}
@@ -165,7 +165,7 @@ let sug=[],sh=0;
 function bSug(){sug=find($('#bi').value);sh=0;const l=$('#bl');if(!sug.length){l.hidden=true;return}l.hidden=false;
  l.innerHTML=sug.map((i,k)=>`<div class="${k==sh?'h':''}" onclick="addLine('${i.id}')"><b>${esc(i.name)}</b> · ${rk(i)} · ${fq(i,stockOf(i.id))} in stock · ${inr(i.mrp)}${packOf(i)>1?' / strip of '+packOf(i):''}</div>`).join('')}
 function bKey(e){if(e.key=='Enter'){const b=bcLookup($('#bi').value).i;if(b){e.preventDefault();return addLine(b.id)}}if(e.key=='Enter'&&!$('#bi').value&&B.lines.length){e.preventDefault();return bSave(1)}if($('#bl').hidden)return;if(e.key=='ArrowDown'){sh=Math.min(sh+1,sug.length-1);e.preventDefault()}else if(e.key=='ArrowUp'){sh=Math.max(sh-1,0);e.preventDefault()}else if(e.key=='Enter'){e.preventDefault();sug[sh]&&addLine(sug[sh].id);return}else if(e.key=='Escape'){$('#bl').hidden=true;return}else return;
- [...$('#bl').children].forEach((d,k)=>d.className=k==sh?'h':'')}
+ [...$('#bl').children].forEach((d,k)=>{d.className=k==sh?'h':'';if(k==sh&&d.scrollIntoView)d.scrollIntoView({block:'nearest'})})}
 function addLine(id){const i=item(id);if(!stockOf(id))return alert(i.name+' is out of stock (or only expired stock).');
  const ex=B.lines.find(l=>l.itemId==id);if(ex)ex.qty++;else B.lines.push({itemId:id,qty:1,loose:false});
  const bi=$('#bi');if(bi){bi.value='';$('#bl').hidden=true}bDraw();const k=B.lines.findIndex(l=>l.itemId==id),qi=$('#q_'+k);if(qi){qi.focus();qi.select()}}
@@ -507,6 +507,7 @@ function pHelp(){$('#main').innerHTML=`<div class=card><h3>❓ ${t('Help')}</h3>
  <div class=card><h3>⌨ ${t('All shortcuts')}</h3><table>${SC.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}${L2(`<small class=l2>${r[2]}</small>`,`<small class=l2>${r[3]}</small>`)}</td></tr>`).join('')}</table></div>${DEV()}`;hF();$('#hq').focus()}
 function hF(){const q=($('#hq').value||'').toLowerCase();$('#hl').innerHTML=HELP.filter(h=>!q||h.join(' ').toLowerCase().includes(q)).map(h=>`<div class=card><h3>${h[0]} ${h[1]}</h3><p>${h[2]}</p>${L2(`<p class=l2p>${h[3]}</p>`,`<p class=l2p>${h[4]}</p>`)}</div>`).join('')||'<div class=card>Nothing found. Call the developer below.</div>'}
 const FK={F1:'search',F2:'bill',F3:'purchase',F4:'stock',F6:'expiry',F7:'order',F8:'reports'};
+addEventListener('focusin',e=>{const t=e.target;if(t&&t.tagName=='INPUT'&&!t.hasAttribute('autocomplete')&&t.type!='password')t.setAttribute('autocomplete','off')});
 addEventListener('keydown',e=>{if(!ME)return;
  if(e.ctrlKey&&e.key.toLowerCase()=='p'){e.preventDefault();return reprint()}
  if(e.altKey&&e.key.toLowerCase()=='r'){e.preventDefault();return reprintNo()}
