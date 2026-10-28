@@ -1,4 +1,4 @@
-const VER='0.9.6';
+const VER='0.9.7';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -383,6 +383,9 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
   const me=await api(`/rest/v1/members?select=role&shop_id=eq.${sh}&user_id=eq.${CL.uid}`);
   if(!me.length)throw new Error('This login was removed from the shop. Ask the owner.');
   if(me[0].role!=CL.role){CL.role=me[0].role;clSave();changed=true}
+  // full reset by the owner (any counter): epoch went up -> clear this computer's business data before uploading anything old
+  const ep=(((await api(`/rest/v1/shops?select=epoch&id=eq.${sh}`))||[])[0]||{}).epoch||0;
+  if(CL.ep==null){CL.ep=ep;clSave()}else if(ep!=CL.ep){wipeBiz();CL.ep=ep;CL.cur=0;CL.icur='';clSave();changed=true;setTimeout(()=>alert('The owner did a FULL RESET of the shop. Medicines, stock and bills on this computer were cleared.'),0)}
   // rows this login is not allowed to upload never reach the server: take them out of stock and keep them aside
   const rej=[];for(const[kind,col]of Object.entries(KINDS)){if(CAN[CL.role](kind))continue;const bad=D[col].filter(x=>!x._s);if(bad.length){D[col]=D[col].filter(x=>x._s);bad.forEach(x=>rej.push({kind,at:new Date().toISOString(),doc:x}))}}
   if(rej.length){D.rejected=(D.rejected||[]).concat(rej);rebuild();changed=true;setTimeout(()=>alert(rej.length+' entry(s) were made with a higher PIN than this cloud login allows ('+CL.role+'). They were NOT uploaded and were taken out of stock. They are kept in the backup file under "rejected".'),0)}
@@ -466,7 +469,7 @@ function pSettings(){const s=D.settings;
  <table><tr><th>${t('Name')}</th><th>${t('Role')}</th><th>${t('PIN')}</th><th></th></tr>${D.users.map(u=>`<tr><td>${esc(u.name)}</td><td>${u.role}</td><td>••••</td><td><button class=b onclick="uPin('${u.id}')">Change PIN</button> ${u.id!=ME.id?`<button class=x onclick="uDel('${u.id}')">✕</button>`:''}</td></tr>`).join('')}</table><br>
  <div class=row><label>${t('Name')}<input id=un></label><label>${t('Role')}<select id=ur><option>staff</option><option>manager</option><option>owner</option></select></label><label>${t('PIN (4–6 digits)')}<input id=upn inputmode=numeric maxlength=6></label><label>&nbsp;<button class=p onclick="uAdd()">+ Add user</button></label></div></div>
  <div class=card><h3>Backup</h3><p>${AB.ok?`<b class=grn>✅ Auto backup is ON</b> – saved a few seconds after every change into the <b>backups</b> folder next to app.py (last: ${localStorage.asmaAB||AB.last}). A new copy every hour is kept for 60 days; a smaller or empty copy never replaces a bigger one. Tip: put this folder in Google Drive for desktop to keep a copy online.`:(AB.err?`<b class=red>⚠ Last auto backup was refused: ${esc(AB.err.slice(0,120))}</b>`:`<b class=red>⚠ Auto backup is OFF</b> – start the software with <b>START.bat</b> or <b>python app.py</b> to turn it on.`)}</p><p class=mut>Data lives on this computer. Also download a backup to a pen drive regularly (last download: ${D.settings.lastBackup||'never'}). PINs are stored as secure hashes, never as plain numbers.</p><button class=b onclick="bk()">⬇ Download backup</button> <button class=b onclick="makeRec()">🔑 ${D.settings.recH?'Make new':'Make'} Owner recovery key</button> <label class=b style="display:inline-block;padding:10px 16px;border-radius:8px;cursor:pointer;font-size:15px;color:var(--n);font-weight:600">⬆ Restore<input type=file accept=.json hidden onchange="rs(this.files[0])"></label></div>
- <div class=card style="border:2px solid var(--r)"><h3 class=red>Demo reset</h3><button class=b onclick="if(prompt('Type RESET to reload demo medicines')==='RESET'){if(CL&&CL.shop)return alert('Disconnect from the cloud first.');wipeLocal().then(()=>location.reload())}">Reload demo data</button> <button class=x onclick="startReal()">🏁 Start real shop (remove demo data)</button></div>
+ <div class=card style="border:2px solid var(--r)"><h3 class=red>Demo reset</h3><button class=b onclick="if(prompt('Type RESET to reload demo medicines')==='RESET'){if(CL&&CL.shop)return alert('Disconnect from the cloud first.');wipeLocal().then(()=>location.reload())}">Reload demo data</button> <button class=x onclick="startReal()">🏁 Start real shop (remove demo data)</button> <button class=x onclick="fullReset()">🧹 Full reset (all counters)</button></div>
  <p class=mut style="text-align:center">Software by UltraAccounting · 7602292599 · Demo v${VER}</p>`}
 async function uAdd(){const n=$('#un').value.trim(),p=$('#upn').value.trim();if(!n||!/^\d{4,6}$/.test(p))return alert('Name and a 4–6 digit PIN are needed.');const u={id:uid(),name:n,role:$('#ur').value};u.pinH=await hashPin(u,p);D.users.push(u);save();pSettings()}
 function uDel(id){if(!confirm('Remove this user?'))return;D.users=D.users.filter(u=>u.id!=id);save();pSettings()}
@@ -597,7 +600,12 @@ function impAdd(){let n=0,skip=0,made=0;IMP.list.forEach(r=>{if(!r.batch||!r.exp
  IMP=null;if(made)save();puDraw();alert(n+' lines added'+(made?', '+made+' new medicines created (set their rack and pack later)':'')+(skip?'. '+skip+' lines skipped (batch/expiry missing or expired) – add them by hand.':'.')+' Check and press Save purchase.')}
 
 // ---------- Start real shop + opening stock import ----------
-function startReal(){if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');if(CL&&CL.shop)return alert('This computer is connected to the cloud. Do this before creating the cloud shop.');
+function wipeBiz(){D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.rejected=[];D.settings.billNo=1;D.settings.realShop=today()}
+async function fullReset(){if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');const on=CL&&CL.shop;if(on&&CL.role!='owner')return alert('Only the cloud owner login can reset the shop.');
+ if(prompt('FULL RESET'+(on?' of the shop on ALL counters and the cloud':'')+':\nremoves ALL medicines, stock, bills, purchases, returns and udhaar. Users, PINs, logins and shop details stay. A backup file downloads first.\n\nType RESET to continue:')!=='RESET')return;
+ bk();if(on){if(globalThis.navigator&&navigator.onLine===false)return alert('Internet is needed for a cloud reset.');try{const e=await rpc('reset_shop',{p_shop:CL.shop});wipeBiz();CL.ep=e;CL.cur=0;CL.icur='';clSave()}catch(e){return alert('Reset failed: '+e.message)}}else wipeBiz();
+ save(1);if(on)sync();alert('Done. The shop is empty. Add medicines from Stock → Import stock list, Purchase, or Stock → New medicine.');go('stock')}
+function startReal(){if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');if(CL&&CL.shop)return alert('Demo is already removed. To empty a connected shop use 🧹 Full reset.');
  if(prompt('This removes ALL medicines, stock, bills, purchases, returns and udhaar. Users, PINs and shop details stay. A backup file downloads first.\n\nType START to continue:')!=='START')return;
  bk();D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.rejected=[];D.settings.billNo=1;D.settings.realShop=today();save(1);alert('Done. Now add your medicines: Stock → Import stock list (Excel/CSV), or Purchase.');go('stock')}
 let STI=null;
