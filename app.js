@@ -1,4 +1,4 @@
-const VER='0.9.9';
+const VER='0.9.10';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -95,7 +95,8 @@ function pLogin(){if(!D.users.some(u=>u.pinH))return pSetup();$('#nav').innerHTM
  </div>${DEV()}`;$('#lp').focus()}
 function pSetup(){$('#nav').innerHTML='';$('#who').innerHTML='';
  $('#main').innerHTML=`<div class=card style="max-width:400px;margin:40px auto;text-align:center"><img src="logo.png" style="height:90px"><h3>First-time setup</h3><p class=mut>Create the Owner PIN. Only the Owner can add staff later.</p>
- <input id=s1 type=password inputmode=numeric maxlength=6 placeholder="New Owner PIN (4–6 digits)"><br><br><input id=s2 type=password inputmode=numeric maxlength=6 placeholder="Repeat PIN" onkeydown="if(event.key=='Enter')doSetup()"><br><br><button class=p style="width:100%" onclick="doSetup()">Save</button></div>${DEV()}`;$('#s1').focus()}
+ <input id=s1 type=password inputmode=numeric maxlength=6 placeholder="New Owner PIN (4–6 digits)"><br><br><input id=s2 type=password inputmode=numeric maxlength=6 placeholder="Repeat PIN" onkeydown="if(event.key=='Enter')doSetup()"><br><br><button class=p style="width:100%" onclick="doSetup()">Save</button><hr><p><b>Shop already running on another computer?</b><br><span class=mut>Do NOT make a new PIN. Join with the cloud login; the Owner PIN and staff PINs come automatically.</span></p><button class=b style="width:100%" onclick="pJoin()">☁️ Join existing shop (cloud login)</button></div>${DEV()}`;$('#s1').focus()}
+function pJoin(){$('#nav').innerHTML='';$('#who').innerHTML='';cur='cloud';pCloud();$('#main').insertAdjacentHTML('afterbegin','<div class=card><button class=b onclick="pLogin()">← Back</button> <b>New computer:</b> sign in with the email + password the Owner gave you, then press Join. After that, log in with your normal PIN.</div>')}
 function recKey(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',r=new Uint32Array(12);(globalThis.crypto&&crypto.getRandomValues)?crypto.getRandomValues(r):r.forEach((_,k)=>r[k]=Math.random()*1e9);let k='';r.forEach((x,j)=>k+=(j&&j%4==0?'-':'')+A[x%A.length]);return k}
 async function makeRec(){const k=recKey();D.settings.recH=await hashPin({id:'recovery'},k);save();alert('OWNER RECOVERY KEY:\n\n'+k+'\n\nWrite it on paper and keep it safe. If the Owner PIN is forgotten, this key resets it. It will not be shown again.');return k}
 async function forgotPin(){if(!D.settings.recH)return alert('No recovery key was made on this computer. Restore your latest backup file, or contact UltraAccounting (7602292599).');const k=(prompt('Enter Owner recovery key (XXXX-XXXX-XXXX)')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/(.{4})(?=.)/g,'$1-');
@@ -407,15 +408,16 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
   for(const e of ir){const k=D.items.findIndex(i=>i.id==e.id);if(k<0){D.items.push(strip(e.data));changed=true}else if(!D.items[k]._d&&JSON.stringify(strip(D.items[k]))!=JSON.stringify(strip(e.data))){D.items[k]=strip(e.data);changed=true}CL.icur=e.updated_at}clSave();
   // 3. shop settings + PIN users (the owner's computer is the source)
   const shop=((await api(`/rest/v1/shops?select=name,settings&id=eq.${sh}`))||[])[0];const loc=sharedOf();
-  if(CL.role=='owner'&&loc!==CL.setH){await api(`/rest/v1/shops?id=eq.${sh}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({settings:JSON.parse(loc)})});CL.setH=loc}
+  if(CL.role=='owner'&&!CL.pull&&loc!==CL.setH){await api(`/rest/v1/shops?id=eq.${sh}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({settings:JSON.parse(loc)})});CL.setH=loc}
   else if(shop&&shop.settings&&shop.settings.s){const rem=JSON.stringify({s:shop.settings.s});if(rem!==loc){Object.assign(D.settings,shop.settings.s);changed=true}CL.setH=sharedOf()}
   const lu=usersOf();
-  if(CL.role=='owner'&&lu!==CL.usH){const rows=D.users.map(u=>({shop_id:sh,id:u.id,role:u.role,data:u})).concat([{shop_id:sh,id:'__rec',role:'owner',data:{recH:D.settings.recH||null}}]);
+  if(CL.role=='owner'&&!CL.pull&&lu!==CL.usH){const rows=D.users.map(u=>({shop_id:sh,id:u.id,role:u.role,data:u})).concat([{shop_id:sh,id:'__rec',role:'owner',data:{recH:D.settings.recH||null}}]);
    await api('/rest/v1/shop_users?on_conflict=shop_id,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
    for(const id of (CL.uids||[]).filter(id=>!D.users.some(u=>u.id==id)))await api(`/rest/v1/shop_users?shop_id=eq.${sh}&id=eq.${encodeURIComponent(id)}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
    CL.usH=lu;CL.uids=D.users.map(u=>u.id)}
   else{const ur=await api(`/rest/v1/shop_users?select=id,role,data&shop_id=eq.${sh}`);const us=ur.filter(x=>x.id!='__rec').map(x=>x.data),rc=ur.find(x=>x.id=='__rec');
    if(us.length){const before=usersOf();D.users=us;D.settings.recH=rc?rc.data.recH:null;if(usersOf()!==before){changed=true;if(ME&&!D.users.some(u=>u.id==ME.id&&u.pinH==ME.pinH)){ME=null;sessionStorage.removeItem('uid')}else if(ME)ME=D.users.find(u=>u.id==ME.id)}CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}}
+  if(CL.pull){delete CL.pull;CL.setH=sharedOf();CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}
   clSave();
   if(changed){rebuild();if(D.settings.series){const mx=Math.max(0,...D.sales.filter(x=>(x.ser||'')==D.settings.series).map(x=>+x.no||0));if(mx>=D.settings.billNo)D.settings.billNo=mx+1}}
   SY.err=errs.join(' · ');SY.last=new Date().toTimeString().slice(0,5);save(1);
@@ -453,7 +455,7 @@ async function clCreate(){const ser=clSer();if(!ser)return;if(!confirm('Upload a
 async function clJoin(id,role,name){const ser=clSer();if(!ser)return;if(!await clClaim(id,ser))return;if(!confirm('Replace ALL local data on this computer with the cloud data of "'+name+'"?'))return;bk();
  const keep={device:D.settings.device,series:ser,dbId:D.settings.dbId,billNo:1,packV:D.settings.packV,lastBackup:D.settings.lastBackup};
  D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.settings={...D.settings,...keep};
- CL.shop=id;CL.role=role;CL.shopName=name;CL.cur=0;CL.icur='';CL.setH=sharedOf();CL.usH='';CL.uids=[];clSave();save(1);await sync();
+ CL.shop=id;CL.role=role;CL.shopName=name;CL.cur=0;CL.icur='';CL.setH=sharedOf();CL.usH='';CL.uids=[];CL.pull=1;clSave();save(1);await sync();
  alert(SY.err?'Joined, but: '+SY.err:'Joined. Log in with your PIN.');logout()}
 async function clOut(q){if(!q){if(!confirm('Disconnect this computer from the cloud? Local data stays.'))return;if(!(ME&&ME.role=='owner'&&CL.role=='owner')){const pw=prompt('Password of the cloud login '+CL.email+':');if(!pw)return;try{await clAuth({email:CL.email,password:pw},'password')}catch(e){return alert('Wrong password')}}}CL=null;localStorage.removeItem('asmaCloud');whoUI();pCloud()}
 async function clMembers(){try{const ms=await api(`/rest/v1/members?select=email,role&shop_id=eq.${CL.shop}&order=created_at`);$('#c_mem').innerHTML=`<table><tr><th>Email</th><th>Role</th><th></th></tr>${ms.map(m=>`<tr><td>${esc(m.email||'')}</td><td>${m.role}</td><td>${m.email&&m.email!=CL.email?`<button class=x onclick="clRemove('${esc(m.email)}')">Remove</button>`:''}</td></tr>`).join('')}</table>`}catch(e){$('#c_mem').innerHTML='<span class=red>'+esc(e.message)+'</span>'}}
