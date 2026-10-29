@@ -1,4 +1,4 @@
-const VER='0.9.18';
+const VER='0.9.19';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -307,6 +307,27 @@ const fefo=id=>D.batches.filter(b=>b.itemId==id&&b.qty>0&&!expired(b.exp)).sort(
 const rk=i=>`<span class=rack>${esc(i.zone)} · Rack ${esc(i.rack)}</span>`;
 const GSTRE=/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const byBc=q=>{q=String(q||'').trim();return q.length>=4?D.items.find(i=>i.bc&&String(i.bc).split(/[ ,]+/).includes(q)):null};
+// ---------- Medicine master list (≈2.4 lakh Indian medicines: name, company, composition, strip size) ----------
+// Separate read-only file master.txt.gz; never part of shop data, so reset / fresh start never touch it.
+const saltKey=x=>String(x||'').toLowerCase().replace(/[()\s]/g,'').split('+').filter(Boolean).sort().join('+');
+let MS=null,MSP=null,MSE='';
+function mLoad(){if(MS)return Promise.resolve(MS);if(MSP)return MSP;MSP=(async()=>{try{const r=await fetch('master.txt.gz');if(!r.ok)throw new Error('HTTP '+r.status);let u=new Uint8Array(await r.arrayBuffer());
+ if(u[0]==0x1f&&u[1]==0x8b){if(typeof DecompressionStream=='undefined')throw new Error('old browser');u=new Uint8Array(await new Response(new Blob([u]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer())}
+ const L=new TextDecoder().decode(u).split('\n'),ic=L.indexOf('#C'),is=L.indexOf('#S'),im=L.indexOf('#M'),C=L.slice(ic+1,is),S=L.slice(is+1,im),SK=S.map(saltKey),N=[],LO=[],CI=[],SI=[],PK=[],PL=[],BY={};
+ for(let k=im+1;k<L.length;k++){const f=L[k].split('\t');if(f.length<4)continue;const j=N.length;N.push(f[0]);LO.push(f[0].toLowerCase());CI.push(+f[1]);SI.push(+f[2]);PK.push(+f[3]||1);PL.push(f[4]||'');(BY[f[2]]||(BY[f[2]]=[])).push(j)}
+ MS={N,LO,CI,SI,PK,PL,C,S,SK,BY,n:N.length};return MS}catch(e){MSE=String(e.message||e);MSP=null;return null}})();return MSP}
+const mRow=j=>({name:MS.N[j],company:MS.C[MS.CI[j]]||'',salt:MS.S[MS.SI[j]]||'',pack:MS.PK[j],packLabel:MS.PL[j]});
+// name search in the master list (starts-with first, then contains), skipping names the shop already has
+function mFind(q,n=8){if(!MS)return[];q=String(q||'').trim().toLowerCase();if(q.length<3)return[];const have=new Set(D.items.map(i=>i.name.toLowerCase())),a=[],b=[];
+ for(let j=0;j<MS.n&&a.length<n;j++){const x=MS.LO[j];if(x.startsWith(q)){if(!have.has(x))a.push(j)}else if(b.length<n&&x.includes(q)&&!have.has(x))b.push(j)}return a.concat(b).slice(0,n).map(mRow)}
+function mExact(name){if(!MS)return null;const q=String(name||'').trim().toLowerCase();if(!q)return null;const j=MS.LO.indexOf(q);return j<0?null:mRow(j)}
+// other brands with the same composition (from the master list), not in the shop
+function mSame(salt,n=6){if(!MS)return[];const k=saltKey(salt);if(!k)return[];const have=new Set(D.items.map(i=>i.name.toLowerCase()));let si=MS.SK.indexOf(k);if(si<0)return[];
+ return (MS.BY[si]||[]).filter(j=>!have.has(MS.LO[j])).slice(0,n).map(mRow)}
+// medicines in this shop with the same composition (same salts + strength), in stock first
+const sameIn=i=>{const k=saltKey(i&&i.salt);return k?D.items.filter(x=>x.id!=i.id&&saltKey(x.salt)==k).sort((a,b)=>stockOf(b.id)-stockOf(a.id)):[]};
+let MPRE=null;
+function mAdd(name){const m=mFind(name,40).find(x=>x.name==name)||mExact(name);if(!m)return;MPRE=m;newItem()}
 function find(q){q=q.trim().toLowerCase();if(!q)return[];const b=byBc(q);if(b)return[b];return D.items.filter(i=>(i.name+' '+i.salt+' '+i.company).toLowerCase().includes(q)).slice(0,30)}
 
 // ---------- nav ----------
@@ -328,13 +349,17 @@ function pSearch(){
  <div class=card>Medicines<div class=big>${D.items.length}</div><span class=mut>in ${ZONES.length} sides × ${RACKS.length} racks</span></div></div>
  <div class="card hero"><h3>🔍 ${t('Search')}: medicine, salt or company</h3><input id=q placeholder="Type 2–3 letters… e.g. mont, para, azi" autofocus oninput="sRes()"><div id=sr class=res></div></div>`;
  $('#q').focus()}
-function sRes(){const q=$('#q').value,r=find(q);
- $('#sr').innerHTML=!q.trim()?'':!r.length?'<p class=mut>No medicine found.</p>':r.map(i=>{const s=stockOf(i.id),b=fefo(i.id)[0];
-  const alt=s?'':D.items.filter(x=>x.id!=i.id&&x.salt==i.salt&&stockOf(x.id)>0);
+function sRes(){const q=$('#q').value,r=find(q),canAdd=ME&&ME.role!='staff';if(!MS&&q.trim().length>=3)mLoad().then(()=>{if($('#q')&&$('#q').value==q)sRes()});
+ const loc=!q.trim()?'':!r.length?'<p class=mut>Not in your shop.</p>':r.map(i=>{const s=stockOf(i.id),b=fefo(i.id)[0];
+  const alt=sameIn(i),ai=alt.filter(x=>stockOf(x.id)>0),mo=r.length<=3?mSame(i.salt,5):[];
   return`<div class=ri><div class=nm><b>${esc(i.name)}</b>${isH1(i)?' '+H1TAG:''} <span class=mut>${esc(i.company)}</span><br><span class=mut>${esc(i.salt)}</span>
-  ${alt&&alt.length?`<br><span class=red>Out of stock.</span> Same salt: ${alt.map(x=>`<b>${esc(x.name)}</b> (${rk(x)}, ${stockOf(x.id)})`).join(', ')}`:''}</div>
+  ${!s&&ai.length?'<br><span class=red>Out of stock.</span>':''}${ai.length?`<br>🔁 <b>Same composition in shop:</b> ${ai.slice(0,6).map(x=>`<a href="#" onclick="billAdd('${x.id}');return false"><b>${esc(x.name)}</b></a> <span class=mut>(${esc(x.company)}, ${rk(x)}, ${stockOf(x.id)} in stock)</span>`).join(' · ')}`:alt.length?`<br><span class=mut>Same composition in shop (no stock): ${alt.slice(0,4).map(x=>esc(x.name)).join(', ')}</span>`:''}
+  ${mo.length?`<br><span class=mut>Other brands, same composition (not in shop): ${mo.map(x=>esc(x.name)+' – '+esc(x.company)).join(' · ')}</span>`:''}</div>
   <div>${rk(i)}</div><div style="text-align:right;min-width:90px"><b class="${s?'':'red'}">${s} in stock</b><br>${inr(i.mrp)}${b?`<br><span class=mut>Exp ${b.exp}</span>`:''}</div>
-  <button class=p onclick="billAdd('${i.id}')">+ Bill</button></div>`}).join('')}
+  <button class=p onclick="billAdd('${i.id}')">+ Bill</button></div>`}).join('');
+ const ms=r.length<30?mFind(q,8):[];
+ const mas=!q.trim()||q.trim().length<3?'':ms.length?`<div style="margin-top:10px"><b>📚 Medicine list</b> <span class=mut>(not in your shop yet${canAdd?' – press Add, then fill MRP and stock':''})</span>${ms.map(m=>{const ai=D.items.filter(x=>saltKey(x.salt)==saltKey(m.salt)&&stockOf(x.id)>0);return`<div class=ri><div class=nm><b>${esc(m.name)}</b> <span class=mut>${esc(m.company)}</span><br><span class=mut>${esc(m.salt)}${m.packLabel?' · '+esc(m.packLabel):''}</span>${ai.length?`<br>🔁 <b>In your shop, same composition:</b> ${ai.slice(0,5).map(x=>`<a href="#" onclick="billAdd('${x.id}');return false"><b>${esc(x.name)}</b></a> <span class=mut>(${rk(x)}, ${stockOf(x.id)})</span>`).join(' · ')}`:''}</div>${canAdd?`<button class=b onclick="mAdd('${esc(m.name).replace(/'/g,"\\'")}')">+ Add</button>`:''}</div>`}).join('')}</div>`:MSP&&!MS?'<p class=mut>Loading medicine list…</p>':MSE&&!MS?`<p class=mut>Medicine list could not load (${esc(MSE)}).</p>`:'';
+ $('#sr').innerHTML=loc+mas}
 
 // ---------- Bill ----------
 let B={lines:[],cust:'',phone:'',disc:0,pay:'Cash'};
@@ -348,8 +373,8 @@ function pBill(){
  ${lastBills()}<div class=card style="background:#14305c;color:#fff;font-size:13px"><b>⌨ Keyboard:</b> type name → <b>Enter</b> → qty → <b>Enter</b> → next medicine · empty box + <b>Enter</b> = Save & Print · <b>F10</b> Save & Print · <b>F9</b> Save only · <b>F11</b> WhatsApp · <b>Alt+C</b> Customer · <b>Alt+M</b> Mobile · <b>Alt+O</b> Doctor · <b>Alt+A</b> Patient address (H1) · <b>Alt+P</b> Payment · <b>Alt+D</b> Discount · qty <b>5</b> = 5 strips, <b>5L</b> = 5 loose tablets · <b>Ctrl+Del</b> remove last · <b>Esc</b> back to search · <b>Ctrl+P</b> reprint last bill · <b>Alt+R</b> reprint by bill no.<br>
  <b>Pages:</b> F1 Search · F2 New Bill · F3 Purchase · F4 Stock · F6 Expiry · F7 Order list · F8 Reports</div>`;bDraw();$('#bi').focus()}
 let sug=[],sh=0;
-function bSug(){sug=find($('#bi').value);sh=0;const l=$('#bl');if(!sug.length){l.hidden=true;return}l.hidden=false;
- l.innerHTML=sug.map((i,k)=>`<div class="${k==sh?'h':''}" onclick="addLine('${i.id}')"><b>${esc(i.name)}</b>${isH1(i)?' '+H1TAG:''} · ${rk(i)} · ${fq(i,stockOf(i.id))} in stock · ${inr(i.mrp)}${packOf(i)>1?' / strip of '+packOf(i):''}</div>`).join('')}
+function bSug(){sug=find($('#bi').value);{const ids=new Set(sug.map(x=>x.id)),ex=[];sug.slice(0,3).forEach(i=>{if(stockOf(i.id)>0&&sug.length>1)return;sameIn(i).filter(x=>stockOf(x.id)>0&&!ids.has(x.id)).slice(0,4).forEach(x=>{ids.add(x.id);ex.push(Object.assign(Object.create(x),{_alt:i.name}))})});sug=sug.concat(ex)}sh=0;const l=$('#bl');if(!sug.length){l.hidden=true;return}l.hidden=false;
+ l.innerHTML=sug.map((i,k)=>`<div class="${k==sh?'h':''}" onclick="addLine('${i.id}')">${i._alt?'<span class=mut>🔁 same as '+esc(i._alt)+':</span> ':''}<b>${esc(i.name)}</b>${isH1(i)?' '+H1TAG:''} · ${rk(i)} · ${fq(i,stockOf(i.id))} in stock · ${inr(i.mrp)}${packOf(i)>1?' / strip of '+packOf(i):''}</div>`).join('')}
 function bKey(e){if(e.key=='Enter'){const b=bcLookup($('#bi').value).i;if(b){e.preventDefault();return addLine(b.id)}}if(e.key=='Enter'&&!$('#bi').value&&B.lines.length){e.preventDefault();return bSave(1)}if($('#bl').hidden)return;if(e.key=='ArrowDown'){sh=Math.min(sh+1,sug.length-1);e.preventDefault()}else if(e.key=='ArrowUp'){sh=Math.max(sh-1,0);e.preventDefault()}else if(e.key=='Enter'){e.preventDefault();sug[sh]&&addLine(sug[sh].id);return}else if(e.key=='Escape'){$('#bl').hidden=true;return}else return;
  [...$('#bl').children].forEach((d,k)=>{d.className=k==sh?'h':'';if(k==sh&&d.scrollIntoView)d.scrollIntoView({block:'nearest'})})}
 function addLine(id){const i=item(id);if(!stockOf(id))return alert(i.name+' is out of stock (or only expired stock).');
@@ -442,12 +467,14 @@ function puTot(ls){const tv=ls.reduce((a,l)=>a+l.qty*l.ptr,0),tx=ls.reduce((a,l)
 function puDraw(){const T=puTot(PU.lines),tot=T.tot;$('#pt').innerHTML=!PU.lines.length?'<p class=mut>Add each medicine from the supplier bill.</p>':`<table><tr><th>${t('Medicine')}</th><th>${t('Batch')}</th><th>${t('Exp')}</th><th>${t('Qty')}+Free</th><th>${t('Rate')}</th><th>${t('MRP')}</th><th>${t('GST')}</th><th>${t('Value')}</th><th></th></tr>${PU.lines.map((l,k)=>`<tr><td>${esc(item(l.itemId).name)}</td><td>${esc(l.batch)}</td><td>${l.exp}</td><td>${l.qty}+${l.free}</td><td>${inr(l.ptr)}</td><td>${inr(l.mrp)}</td><td>${l.gst??0}%</td><td>${inr(l.qty*l.ptr)}</td><td><button class=x onclick="PU.lines.splice(${k},1);puDraw()">✕</button></td></tr>`).join('')}</table><p>Taxable ${inr(T.tv)} · GST (input credit) ${inr(T.tx)}</p><div class=tot><span>Bill total</span><span>${inr(tot)}</span></div><button class=p onclick="puSave()">💾 Save purchase (stock goes up)</button>`}
 function puSave(){if(!PU.lines.length)return alert('Add at least one line.');PU.lines.forEach(l=>{const ex=D.batches.find(b=>b.itemId==l.itemId&&b.batch==l.batch);const cost=l.qty+l.free?Math.round(l.ptr*l.qty/(l.qty+l.free)*100)/100:l.ptr;if(ex){const oq=Math.max(ex.qty,0),nq=l.qty+l.free;ex.cost=Math.round(((ex.cost??ex.ptr)*oq+cost*nq)/(oq+nq||1)*100)/100;ex.qty+=nq;if(l.exp)ex.exp=l.exp;ex.ptr=l.ptr;ex.mrp=l.mrp}else D.batches.push({id:uid(),itemId:l.itemId,batch:l.batch,exp:l.exp,qty:l.qty+l.free,ptr:l.ptr,cost,mrp:l.mrp});const i=item(l.itemId);if(i.mrp!=l.mrp){i.mrp=l.mrp;i._d=1}});
  const T=puTot(PU.lines);D.purchases.push({id:uid(),date:today(),supplier:PU.supplier.trim()||'Unknown supplier',inv:PU.inv,lines:PU.lines,taxable:T.tv,gst:T.tx,total:T.tot,paid:Math.min(PU.paid||0,T.tot),pmode:PU.pmode||'Cash',device:D.settings.device,by:ME.name});save();PU={supplier:'',inv:'',lines:[],paid:0,pmode:'Cash'};alert('Purchase saved. Stock updated.');go('purchase')}
-function newItem(id){const i=id?item(id):{name:'',salt:'',company:'',cat:'',zone:'East',rack:1,gst:12,mrp:0,reorder:10};const h1c=id?isH1(i):false;
+function newItem(id){const i=id?item(id):Object.assign({name:'',salt:'',company:'',cat:'',zone:'East',rack:1,gst:12,mrp:0,reorder:10},MPRE?{name:MPRE.name,salt:MPRE.salt,company:MPRE.company,pack:MPRE.pack,packOk:MPRE.pack>1?false:true}:{});const fromM=!id&&MPRE;MPRE=null;if(!id)mLoad();const h1c=id?isH1(i):false;
  $('#main').innerHTML=`<div class=card><h3>${id?'✏️ Edit':'+ New'} medicine</h3><div class=row>
- <label>${t('Name')}<input id=nn value="${esc(i.name)}"></label><label>${t('Salt / composition')}<input id=ns value="${esc(i.salt)}" oninput="h1Hint()"></label><label>${t('Company')}<input id=nc value="${esc(i.company)}"></label><label>${t('Category')}<input id=nk value="${esc(i.cat)}"></label>
+ <label>${t('Name')}${id?'':' <span class=mut>(type 3 letters: list)</span>'}<input id=nn value="${esc(i.name)}" ${id?'':'list=nml oninput="niM()" onchange="niPick()"'}>${id?'':'<datalist id=nml></datalist>'}</label><label>${t('Salt / composition')}<input id=ns value="${esc(i.salt)}" oninput="h1Hint()"></label><label>${t('Company')}<input id=nc value="${esc(i.company)}"></label><label>${t('Category')}<input id=nk value="${esc(i.cat)}"></label>
  <label>${t('Side')}<select id=nz>${ZONES.map(z=>`<option ${i.zone==z?'selected':''}>${z}</option>`).join('')}</select></label><label>${t('Rack')}<select id=nr>${RACKS.map(r=>`<option ${i.rack==r?'selected':''}>${r}</option>`).join('')}</select></label>
  <label>${t('GST %')}<select id=ng>${[0,5,12,18].map(g=>`<option ${i.gst==g?'selected':''}>${g}</option>`).join('')}</select></label><label>${t('MRP')}<input id=nm type=number step=.01 value="${i.mrp}"></label><label>${t('Reorder at')}<input id=no type=number value="${i.reorder}"></label><label>Barcode <span class=mut>(scan; more than one: comma)</span><input id=nbc value="${esc(i.bc||'')}" onkeydown="if(event.key=='Enter')event.preventDefault()"></label><label>HSN<input id=nhs value="${esc(i.hsn||'3004')}" maxlength=8></label><label>Tablets per strip ${i.packOk===false?'<span class=red>⚠ check</span>':''}<input id=npk type=number min=1 value="${i.pack||1}"></label><label style="border:2px solid #c62828;border-radius:8px;padding:6px 8px"><input type=checkbox id=nh1 ${h1c?'checked':''} ${i.h1u?'data-u=1':''} style="width:auto" onchange="this.dataset.u=1;h1Hint()"> <b class=red>${t('Schedule H1')}</b> – Rx register<span id=nh1m class=mut></span></label></div><br>
- <button class=p onclick="niSave('${id||''}')">💾 Save</button> <button class=b onclick="go('stock')">Cancel</button></div>`;h1Hint()}
+ ${fromM?'<p class=mut>Filled from the medicine list. Check the strip size on the real strip, then fill MRP, GST and rack. Add stock from Purchase.</p>':''}<button class=p onclick="niSave('${id||''}')">💾 Save</button> <button class=b onclick="go('stock')">Cancel</button></div>`;h1Hint()}
+function niM(){const v=$('#nn').value,d=$('#nml');if(!d)return;if(!MS){mLoad().then(()=>{if($('#nn')&&$('#nn').value==v)niM()});return}d.innerHTML=mFind(v,12).map(m=>`<option value="${esc(m.name)}">${esc(m.company)} · ${esc(m.salt)}</option>`).join('')}
+function niPick(){const m=mExact($('#nn').value);if(!m)return;if(!$('#ns').value.trim())$('#ns').value=m.salt;if(!$('#nc').value.trim())$('#nc').value=m.company;if(m.pack>1&&(+$('#npk').value||1)<=1)$('#npk').value=m.pack;h1Hint()}
 function h1Hint(){const c=$('#nh1'),m=h1Match({salt:$('#ns').value,name:$('#nn').value});if(!c)return;if(!(c.dataset&&c.dataset.u))c.checked=m.length>0;const e=$('#nh1m');if(e)e.innerHTML='<br>'+(m.length?'Auto: H1 salt found – '+esc(m.join(', ')):'Auto: no H1 salt found')+(c.dataset&&c.dataset.u?' · <b>set by hand</b>':'')}
 function niSave(id){const v={name:$('#nn').value.trim(),salt:$('#ns').value.trim(),company:$('#nc').value.trim(),cat:$('#nk').value.trim(),zone:$('#nz').value,rack:+$('#nr').value,gst:+$('#ng').value,mrp:+$('#nm').value||0,reorder:+$('#no').value||0,pack:Math.max(1,+$('#npk').value||1),packOk:true,packUser:true,bc:$('#nbc').value.trim().replace(/\s*,\s*/g,','),hsn:($('#nhs').value.trim()||'3004')};{const au=h1Match(v).length>0,ch=!!$('#nh1').checked;v.h1=ch;v.h1u=ch!==au?1:0}
  if(!v.name)return alert('Name is needed.');for(const c of v.bc?v.bc.split(','):[]){const o=byBc(c);if(o&&o.id!=id)return alert('Barcode '+c+' is already on '+o.name+'.')}if(id)Object.assign(item(id),v,{_d:1});else D.items.push({id:uid(),...v,_d:1});save();go('stock')}
@@ -869,7 +896,7 @@ const nrm=s=>String(s||'').toLowerCase().replace(/\b(tab|tabs|tablet|tablets|cap
 function impMatch(r){if(r.bc){const b=bcLookup(r.bc).i;if(b)return b.id}const n=nrm(r.name);if(!n)return'';const ex=D.items.find(i=>nrm(i.name)==n);if(ex)return ex.id;
  let best='',bl=0;D.items.forEach(i=>{const a=nrm(i.name);if(a.length>=4&&(n.startsWith(a)||a.startsWith(n))&&a.length>bl){best=i.id;bl=a.length}});return best}
 let IMP=null;
-async function puImport(f){if(!f)return;try{let rows;if(/\.xls$/i.test(f.name))return alert('Old .xls file: open it in Excel and "Save As" .xlsx or CSV, then import again.');
+async function puImport(f){if(!f)return;await mLoad();try{let rows;if(/\.xls$/i.test(f.name))return alert('Old .xls file: open it in Excel and "Save As" .xlsx or CSV, then import again.');
  rows=/\.xlsx$/i.test(f.name)?await readXlsx(await f.arrayBuffer()):readCsv(await f.text());const h=impHeader(rows);if(h<0)return alert('Could not find the header row (Item, Batch, Expiry, Qty…) in this file.');
  const map={};rows[h].forEach((c,k)=>{const g=impGuess(c);if(g&&map[g]==null)map[g]=k});IMP={rows,h,map,file:f.name};impDraw()}catch(e){alert('Could not read the file: '+e.message)}}
 function impRows(src=IMP){const{rows,h,map}=src,num=v=>{const n=parseFloat(String(v).replace(/[^0-9.\-]/g,''));return isNaN(n)?0:n},g=(r,k)=>map[k]==null?'':r[map[k]]??'';
@@ -882,7 +909,7 @@ function impDraw(){const rs=impRows();IMP.list=rs.map((r,k)=>({...r,itemId:(IMP.
  <table><tr><th>In file</th><th>Medicine in software</th><th>Batch</th><th>Exp</th><th>Qty+Free</th><th>Rate</th><th>MRP</th><th>GST</th><th></th></tr>${IMP.list.map((r,k)=>{const bad=!r.batch||!r.exp?'Batch/expiry missing':expired(r.exp)?'Expired':'';return`<tr><td>${esc(r.name)}${(r.itemId?isH1(item(r.itemId)):h1Match(r).length)?' '+H1TAG:''}</td><td><select onchange="IMP.list[${k}].itemId=this.value"><option value="">➕ New: ${esc(r.name)}</option>${opt.replace(`value="${r.itemId}"`,`value="${r.itemId}" selected`)}</select></td><td>${esc(r.batch)}</td><td>${r.exp||'?'}</td><td>${r.qty}+${r.free}</td><td>${inr(r.ptr)}</td><td>${inr(r.mrp)}</td><td>${r.gst}%</td><td class=red>${bad}</td></tr>`}).join('')}</table><br>
  <button class=p onclick="impAdd()">✔ Add these lines to the purchase</button> <button class=b onclick="IMP=null;puDraw()">Cancel</button>`}
 function impAdd(){let n=0,skip=0,made=0;IMP.list.forEach(r=>{if(!r.batch||!r.exp||expired(r.exp)){skip++;return}let id=r.itemId;
-  if(!id){const ex=D.items.find(i=>nrm(i.name)==nrm(r.name));if(ex)id=ex.id;else{id=uid();D.items.push({id,name:r.name,salt:r.salt||'',company:r.company||'',cat:'',zone:ZONES[0],rack:RACKS[0],gst:r.gst,mrp:r.mrp,reorder:10,pack:+r.pack||1,packOk:false,hsn:r.hsn||'3004',bc:r.bc||'',h1:h1Match(r).length>0,_d:1});made++}}
+  if(!id){const ex=D.items.find(i=>nrm(i.name)==nrm(r.name));if(ex)id=ex.id;else{id=uid();D.items.push({id,name:r.name,salt:r.salt||(mExact(r.name)||{}).salt||'',company:r.company||(mExact(r.name)||{}).company||'',cat:'',zone:ZONES[0],rack:RACKS[0],gst:r.gst,mrp:r.mrp,reorder:10,pack:+r.pack||(mExact(r.name)||{}).pack||1,packOk:false,hsn:r.hsn||'3004',bc:r.bc||'',h1:h1Match(r).length>0,_d:1});made++}}
   else{const i=item(id);if(r.salt&&!i.salt){i.salt=r.salt;if(!i.h1u)i.h1=isH1(i);i._d=1}if(r.bc&&!byBc(r.bc)){i.bc=i.bc?i.bc+','+r.bc:r.bc;i._d=1}if(r.hsn&&(!i.hsn||i.hsn=='3004')&&r.hsn!='3004'){i.hsn=r.hsn;i._d=1}}
   PU.lines.push({itemId:id,batch:r.batch,exp:r.exp,qty:r.qty,free:r.free,ptr:r.ptr,mrp:r.mrp||item(id).mrp,gst:r.gst});n++});
  IMP=null;if(made)save();puDraw();alert(n+' lines added'+(made?', '+made+' new medicines created (set their rack and pack later)':'')+(skip?'. '+skip+' lines skipped (batch/expiry missing or expired) – add them by hand.':'.')+' Check and press Save purchase.')}
@@ -906,7 +933,7 @@ function startReal(){if(DEMO)return alert('This is the demo shop. To start a rea
  bk();D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.rejected=[];D.settings.billNo=1;D.settings.realShop=today();save(1);alert('Done. Now add your medicines: Stock → Import stock list (Excel/CSV), or Purchase.');go('stock')}
 let STI=null;
 function rackOf(v){v=String(v||'').trim();if(!v)return null;const z=ZONES.find(z=>v.toUpperCase().startsWith(z[0].toUpperCase())),n=+((v.match(/(\d+)/)||[])[1]);return{zone:z||ZONES[0],rack:RACKS.includes(n)?n:RACKS[0]}}
-async function stImport(f){if(!f)return;if(!ME||ME.role!='owner')return alert('Only the Owner can import opening stock.');if(CL&&CL.shop&&CL.role!='owner')return alert('Only the Owner cloud login can import stock.');
+async function stImport(f){if(!f)return;await mLoad();if(!ME||ME.role!='owner')return alert('Only the Owner can import opening stock.');if(CL&&CL.shop&&CL.role!='owner')return alert('Only the Owner cloud login can import stock.');
  try{if(/\.xls$/i.test(f.name))return alert('Old .xls file: open it in Excel and "Save As" .xlsx or CSV, then import again.');const rows=/\.xlsx$/i.test(f.name)?await readXlsx(await f.arrayBuffer()):readCsv(await f.text());const h=impHeader(rows);
   if(h<0)return alert('Could not find the header row (Item, Batch, Expiry, Stock…) in this file.');const map={};rows[h].forEach((c,k)=>{const g=impGuess(c);if(g&&map[g]==null)map[g]=k});STI={rows,h,map,file:f.name};stDraw()}catch(e){alert('Could not read the file: '+e.message)}}
 const STF={name:'Medicine name',salt:'Salt',company:'Company',batch:'Batch',exp:'Expiry',qty:'Stock qty',ptr:'Purchase rate',mrp:'MRP',gst:'GST %',hsn:'HSN',bc:'Barcode',pack:'Pack',rack:'Rack'};
@@ -917,8 +944,9 @@ function stDraw(){const rs=impRows(STI),cols=STI.rows[STI.h];STI.list=rs.map(r=>
  <button class=p onclick="stAdd()">✔ Import ${STI.list.length} lines</button> <button class=b onclick="STI=null;go('stock')">Cancel</button></div>`}
 function stAdd(){let made=0,bt=0,skip=0;const op={id:'open-'+uid(),date:today(),device:D.settings.device,batches:[]};
  STI.list.forEach(r=>{let id=r.itemId||(D.items.find(i=>nrm(i.name)==nrm(r.name))||{}).id;const rk=rackOf(r.rack);
-  if(!id){id=uid();D.items.push({id,name:r.name,salt:r.salt||'',company:r.company||'',cat:'',zone:rk?rk.zone:ZONES[0],rack:rk?rk.rack:RACKS[0],gst:r.gst,mrp:r.mrp,reorder:10,pack:+r.pack||1,packOk:false,h1:h1Match(r).length>0,hsn:r.hsn||'3004',bc:r.bc&&!byBc(r.bc)?r.bc:'',_d:1});made++}
+  if(!id){id=uid();D.items.push({id,name:r.name,salt:r.salt||(mExact(r.name)||{}).salt||'',company:r.company||(mExact(r.name)||{}).company||'',cat:'',zone:rk?rk.zone:ZONES[0],rack:rk?rk.rack:RACKS[0],gst:r.gst,mrp:r.mrp,reorder:10,pack:+r.pack||(mExact(r.name)||{}).pack||1,packOk:false,h1:h1Match(r).length>0,hsn:r.hsn||'3004',bc:r.bc&&!byBc(r.bc)?r.bc:'',_d:1});made++}
   else{const i=item(id);let ch=0;if(r.salt&&!i.salt){i.salt=r.salt;if(!i.h1u)i.h1=isH1(i);ch=1}if(r.company&&!i.company){i.company=r.company;ch=1}if(r.bc&&!byBc(r.bc)){i.bc=i.bc?i.bc+','+r.bc:r.bc;ch=1}if(r.hsn&&r.hsn!='3004'&&(!i.hsn||i.hsn=='3004')){i.hsn=r.hsn;ch=1}if(rk&&r.rack){i.zone=rk.zone;i.rack=rk.rack;ch=1}if(ch)i._d=1}
   if(!(r.qty>0)||!r.batch||!r.exp)return;if(expired(r.exp)){skip++;return}const i=item(id),b={itemId:id,batch:r.batch,exp:r.exp,qty:r.qty,ptr:r.ptr,cost:r.ptr,mrp:r.mrp||i.mrp};op.batches.push(b);bt++;
   const ex=D.batches.find(x=>x.itemId==id&&x.batch==r.batch);if(ex){ex.qty=r2(ex.qty+r.qty);ex.exp=r.exp;ex.ptr=r.ptr;ex.cost=r.ptr;ex.mrp=b.mrp}else D.batches.push({id:uid(),...b})});
  if(op.batches.length)D.openings.push(op);STI=null;save();alert(made+' new medicines, '+bt+' stock batches added'+(skip?', '+skip+' expired batches skipped':'')+'. New medicines show "⚠ check pack" – confirm strip size and rack.');go('stock')}
+;if(typeof navigator!='undefined'&&navigator.onLine)setTimeout(()=>mLoad(),6000);
