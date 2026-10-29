@@ -1,4 +1,4 @@
-const VER='0.9.16';
+const VER='0.9.17';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -187,7 +187,7 @@ function demoSeed(){
  ['Prega News Kit','Pregnancy test kit','Mankind','Women care','West',8,12,60,40,8,1]];
  const HSN={Device:'9018',Surgical:'3005','Baby care':'1901',Nutrition:'2106',General:'3808','Women care':'9619'};
  D={settings:{shop:'DEMO MEDICAL STORE',addr:'Main Road, Chanchal, Malda, West Bengal 732123',phone:'98000 00000',gstin:'19ABCDE1234F1Z5',dl:'WB/MLD/RX-0000 (demo)',device:'Counter 1',billNo:1,series:'A',paper:'a5',terms:'This is a DEMO bill. Software by UltraAccounting, 7602292599.',packV:2,demo:1,recH:'pbk1$200000$15020c038d54ca5281452a00265ffb26$ebdedfdc12fc7ab9c7ef685b1ae6d35f6003bdebfff1fcf4f946a7aa41da2179'},
-  items:[],batches:[],sales:[],purchases:[],customers:[],sreturns:[],preturns:[],cpays:[],spays:[],openings:[],
+  items:[],batches:[],sales:[],purchases:[],customers:[],sreturns:[],preturns:[],cpays:[],spays:[],openings:[],cashes:[],
   users:[{id:'d_own',name:'Owner (demo)',role:'owner',pinH:'pbk1$200000$6f1bf491a00c7618805d89314afb5fda$14105b0d12a3b9cdad9530238396213d64ad6c2df4bb82c0ba1d9b6db2411836'},
    {id:'d_mgr',name:'Rakib (manager)',role:'manager',pinH:'pbk1$200000$76826b2f35454ed3fdd6a8f01cb42ba3$fe38f1cb18181eaef66442fb38b5d67c7a763ac1e2d4f80d5a4d60104eb05e45'},
    {id:'d_stf',name:'Sumon (staff)',role:'staff',pinH:'pbk1$200000$eb920ce9a30ed461564a03ff1960fb9e$e82d3d0ddf1c515908167b87c10e3708800ba26262f5ace9418d61935a9aa411'},
@@ -228,6 +228,9 @@ function demoSeed(){
    if(h1){s.h1=1;s.padr=cu[2];s.dadr=dr[1]}
    if(!h1&&pay!='Credit'&&rnd()<.03){s.cust='Chanchal Nursing Home';s.phone='9800011199';s.gstin='19AAAFC1234K1Z2';s.pay='UPI'}
    D.sales.push(s)}
+  // counter cash handed to the owner at day end (today still pending; sometimes a little kept back)
+  if(d<0){const hand={};D.sales.filter(s=>s.date==date&&s.pay=='Cash'&&s.by!='Owner (demo)').forEach(s=>{const k=s.by+'|'+s.device;hand[k]=(hand[k]||0)+s.total});
+   Object.entries(hand).forEach(([k,a])=>{const[f,dev]=k.split('|'),amt=d>-4&&rnd()<.5?Math.floor(a*.8/100)*100:a;if(amt>0)D.cashes.push({id:nid('dj'),date,time:'21:'+String(ri(35,55)),from:f,dev,amt,by:'Owner (demo)'})})}
   // udhaar received now and then
   if(d%6==0){const cd={};D.sales.filter(s=>s.pay=='Credit').forEach(s=>{cd[s.phone]=cd[s.phone]||{n:s.cust,a:0};cd[s.phone].a+=s.total});D.cpays.forEach(p=>{if(cd[p.phone])cd[p.phone].a-=p.amt});
    const ow=Object.entries(cd).filter(x=>x[1].a>100);if(ow.length){const[p,x]=pick(ow);D.cpays.push({id:nid('dc'),date,phone:p,name:x.n,amt:Math.round(x.a*(rnd()<.5?1:.5)),mode:pick(['Cash','UPI']),by:'Owner (demo)'})}}
@@ -244,7 +247,7 @@ function demoSeed(){
 
 if(!D){if(DEMO)demoSeed();else seed()}
 if(!D.users){D.users=[{id:'u1',name:'Owner',role:'owner'}];save()}
-['cpays','spays','sreturns','preturns','openings'].forEach(k=>D[k]=D[k]||[]);
+['cpays','spays','sreturns','preturns','openings','cashes'].forEach(k=>D[k]=D[k]||[]);
 if(!D.settings.packV){const PK={'Montair LC Tab':10,'Montek LC Tab':10,'Deriphyllin Retard 150':10,'Azithral 500 Tab':5,'Augmentin 625 Duo':10,'Allegra 120 Tab':10,'Dolo 650 Tab':15,'Calpol 650 Tab':15,'Zerodol SP Tab':10,'Pan 40 Tab':15,'Pan D Cap':15,'Glycomet 500 SR':10,'Janumet 50/500':15,'Amaryl 1mg Tab':30,'Telma 40 Tab':15,'Amlokind 5 Tab':10,'Ecosprin 75 Tab':14,'Atorva 10 Tab':15,'Shelcal 500 Tab':15,'Becosules Cap':20,'Neurobion Forte Tab':30};
  D.items.forEach(i=>{if(PK[i.name]){i.pack=PK[i.name];i.packOk=true}else if(/\b(tab|cap)/i.test(i.name)){i.packOk=false;i.pack=i.pack||10}else{i.pack=i.pack||1;i.packOk=true}});D.settings.packV=1;save()}
 if(D.settings.packV<2){D.items.forEach(i=>{if((i.pack||1)>1&&!i.packUser)i.packOk=false});D.settings.packV=2;save()}
@@ -479,12 +482,37 @@ function pReports(){const inR=x=>x.date>=RF.from&&x.date<=RF.to,ss=D.sales.filte
  const pur=pu.reduce((a,p)=>a+p.total,0),itc=pu.reduce((a,p)=>a+(p.gst||0),0)-pr.reduce((a,r)=>a+(r.gst||0),0),outg=gst-rg;
  const pay={};ss.forEach(s=>pay[s.pay]=(pay[s.pay]||0)+s.total);const byU={};ss.forEach(s=>byU[s.by||'-']=(byU[s.by||'-']||0)+s.total);
  const udh=custDues().reduce((a,c)=>a+Math.max(c.bal,0),0),sdue=supDues().reduce((a,x)=>a+Math.max(x.bal,0),0);
- $('#main').innerHTML=`<div class=card><h3>📈 ${t('Reports')}</h3><div class=row><label>${t('From')}<input type=date value="${RF.from}" onchange="RF.from=this.value;pReports()"></label><label>${t('To')}<input type=date value="${RF.to}" onchange="RF.to=this.value;pReports()"></label></div></div>
+ $('#main').innerHTML=`<div class=card><h3>📈 ${t('Reports')}</h3><div class=row><label>${t('From')}<input type=date value="${RF.from}" onchange="RF.from=this.value;pReports()"></label><label>${t('To')}<input type=date value="${RF.to}" onchange="RF.to=this.value;pReports()"></label><label>&nbsp;<button class=b onclick="RF.from=RF.to=today();pReports()">Today</button></label></div></div>
  <div class=kp><div class=card>Net sale<div class=big>${inr(tot-rt)}</div><span class=mut>${ss.length} bills${rt?' · returns '+inr(rt):''}</span></div><div class=card>Profit<div class="big grn">${inr((tot-gst-cost)-(rt-rg-rc))}</div><span class=mut>after discount, free qty and returns</span></div><div class=card>Purchases<div class=big>${inr(pur)}</div><span class=mut>incl. GST</span></div><div class=card>Udhaar to collect<div class="big red">${inr(udh)}</div><span class=mut>supplier dues ${inr(sdue)}</span></div></div><br>
  <div class="card tw"><h3>GST summary</h3><table><tr><th>Output GST (on sales, less returns)</th><th>Input GST / ITC (on purchases, less returns)</th><th>Net GST payable</th></tr><tr><td>${inr(outg)}</td><td>${inr(itc)}</td><td><b class="${outg-itc>0?'red':'grn'}">${inr(outg-itc)}</b></td></tr></table><p class=mut>For guidance only; confirm with your CA before filing.</p><button class=b onclick="gstr1()">⬇ GSTR-1 files (B2CS, HSN, Documents) for this period</button></div>
  <div class=card><b>By payment:</b> ${Object.entries(pay).map(([k,v])=>`${k=='Credit'?'Credit (udhaar)':k}: ${inr(v)}`).join(' · ')||'<span class=mut>No sales in this period.</span>'}<br><b>By user:</b> ${Object.entries(byU).map(([k,v])=>`${esc(k)}: ${inr(v)}`).join(' · ')||'-'}</div>
+ ${cashRep(inR)}
  <div class="card tw"><table><tr><th>${t('Bill')}</th><th>${t('Date')}</th><th>${t('Customer')}</th><th>${t('Items')}</th><th>${t('Pay')}</th><th>${t('Counter / By')}</th><th>${t('Total')}</th><th></th></tr>${ss.slice().reverse().map(s=>`<tr><td>${bn(s)}</td><td>${s.date} ${s.time}</td><td>${esc(s.cust||'-')}</td><td>${s.lines.length}</td><td>${s.pay}</td><td>${esc(s.device)} · ${esc(s.by||'')}</td><td><b>${inr(s.total)}</b></td><td><button class=b onclick="printBill(D.sales.find(x=>x.id=='${s.id}'),true)">🖨</button></td></tr>`).join('')}</table></div>`}
 
+
+// ---------- Counter / staff cash (who billed what, cash handed over, cash still to come) ----------
+let RCX='';
+const roleOf=n=>(D.users.find(u=>u.name==n)||{}).role||'';
+function cashRows(inR){const P={},g=n=>{const k=n||'-';return P[k]||(P[k]={name:k,devs:{},bills:0,sale:0,cash:0,upi:0,card:0,credit:0,ref:0,recv:0,jama:0,meds:{}})};
+ D.sales.filter(inR).forEach(s=>{const p=g(s.by);p.devs[s.device||'-']=1;p.bills++;p.sale+=s.total;p[s.pay=='Cash'?'cash':s.pay=='Credit'?'credit':s.pay=='Card'?'card':'upi']+=s.total;
+  const f=s.total/(s.lines.reduce((a,l)=>a+l.amt,0)||1);s.lines.forEach(l=>{const m=p.meds[l.name]||(p.meds[l.name]={name:l.name,strip:0,tab:0,amt:0,pack:packOf(item(l.itemId))});if(l.loose)m.tab+=Math.round(l.qty*m.pack);else m.strip+=l.qty;m.amt+=l.amt*f})});
+ D.sreturns.filter(inR).forEach(r=>{if(/cash/i.test(r.mode||''))g(r.by).ref+=r.amt});
+ D.cpays.filter(inR).forEach(c=>{if(c.mode=='Cash')g(c.by).recv+=c.amt});
+ D.cashes.filter(inR).forEach(c=>{const p=g(c.from);p.jama+=c.amt;if(c.dev)p.devs[c.dev]=1});
+ return Object.values(P).map(p=>{p.hand=Math.round(p.cash+p.recv-p.ref);p.own=roleOf(p.name)=='owner';p.due=p.own?0:Math.round(p.hand-p.jama);return p}).sort((a,b)=>b.sale-a.sale)}
+function cashRep(inR){const rs=cashRows(inR);if(!rs.length)return'';const canJ=ME&&ME.role!='staff',js=D.cashes.filter(inR).slice().reverse();
+ const tdue=rs.reduce((a,p)=>a+Math.max(p.due,0),0);
+ return`<div class="card tw"><h3>🧑‍💼 Counter / staff hisaab</h3><p class=mut>Who billed how much, and how much cash each person has handed over. Cash in hand = cash bills + udhaar received in cash − cash refunds. Press <b>💵 Cash jama</b> when you take cash from a counter.${L2('<br>কে কত বিল করেছে, কত নগদ জমা দিয়েছে আর কত বাকি।','<br>किसने कितना बिल किया, कितना कैश जमा किया और कितना बाकी है।')}</p>
+ <table><tr><th>Name / counter</th><th>${t('Bills')}</th><th>Total sale</th><th>Cash</th><th>UPI</th><th>Card</th><th>Udhaar</th><th>Cash in hand</th><th>Jama</th><th>Baaki</th><th></th></tr>
+ ${rs.map(p=>`<tr><td><b>${esc(p.name)}</b><br><span class=mut>${esc(Object.keys(p.devs).join(', '))}</span></td><td>${p.bills}</td><td><b>${inr(p.sale)}</b></td><td>${inr(p.cash)}</td><td>${inr(p.upi)}</td><td>${inr(p.card)}</td><td>${inr(p.credit)}</td><td>${inr(p.hand)}${p.recv||p.ref?`<br><span class=mut>${p.recv?'+udhaar '+inr(p.recv):''}${p.ref?' −refund '+inr(p.ref):''}</span>`:''}</td><td class=grn>${p.own?'-':inr(p.jama)}</td><td>${p.own?'<span class=mut>owner</span>':`<b class="${p.due>0?'red':'grn'}">${p.due<0?inr(-p.due)+' extra':inr(p.due)}</b>`}</td>
+ <td><button class=b onclick="RCX=RCX=='${esc(p.name).replace(/'/g,'')}'?'':'${esc(p.name).replace(/'/g,'')}';pReports()">💊 Medicines</button> ${canJ&&!p.own&&p.name!=ME.name?`<button class=p onclick="cashJama('${esc(p.name).replace(/'/g,"\\'")}',${Math.max(p.due,0)})">💵 Cash jama</button>`:''}</td></tr>
+ ${RCX==p.name.replace(/'/g,'')?`<tr><td colspan=11 style="background:#f7f9fc"><b>${esc(p.name)} sold:</b><table>${Object.values(p.meds).sort((a,b)=>b.amt-a.amt).map(m=>`<tr><td>${esc(m.name)}</td><td>${[m.strip?r2(m.strip)+(m.pack>1?' strip':''):'',m.tab?m.tab+' tab':''].filter(Boolean).join(' + ')}</td><td>${inr(m.amt)}</td></tr>`).join('')}</table></td></tr>`:''}`).join('')}
+ </table>${tdue>0?`<p class=red><b>Cash still to come from counters: ${inr(tdue)}</b></p>`:'<p class=grn>All counter cash received. 👍</p>'}
+ ${js.length?`<details><summary>Cash jama entries (${js.length})</summary><table><tr><th>${t('Date')}</th><th>From</th><th>Counter</th><th>${t('Amount')}</th><th>Received by</th></tr>${js.map(c=>`<tr><td>${fmtD(c.date)} ${esc(c.time||'')}</td><td>${esc(c.from)}</td><td>${esc(c.dev||'')}</td><td>${inr(c.amt)}</td><td>${esc(c.by)}</td></tr>`).join('')}</table></details>`:''}</div>`}
+function cashJama(name,due){if(!ME||ME.role=='staff')return alert('Only the Owner or Manager can take cash.');if(name==ME.name)return alert('You cannot take cash from yourself.');
+ const v=prompt('Cash received from '+name+' (₹):\n(baaki now '+inr(due)+')',due||'');if(v==null)return;const a=Math.round(+v);if(!(a>0))return alert('Enter the amount');
+ const last=D.sales.filter(s=>s.by==name).slice(-1)[0];
+ D.cashes.push({id:uid(),date:today(),time:new Date().toTimeString().slice(0,5),from:name,dev:last?last.device:'',amt:a,by:ME.name});save();alert('Saved: '+inr(a)+' cash from '+name+'.');pReports()}
 
 // ---------- Schedule H1 register ----------
 let HF={from:today().slice(0,8)+'01',to:today(),q:''};
@@ -576,7 +604,7 @@ function sPay(n){const x=supDues().find(y=>y.name==n);const a=Math.round((+promp
 // ---------- Cloud sync (Supabase) ----------
 // Every bill / purchase / return / payment is uploaded once as a row that is never edited (append-only).
 // Stock is rebuilt from opening stock + all those rows, so two counters can never overwrite each other.
-const KINDS={opening:'openings',sale:'sales',purchase:'purchases',sreturn:'sreturns',preturn:'preturns',cpay:'cpays',spay:'spays'};
+const KINDS={opening:'openings',sale:'sales',purchase:'purchases',sreturn:'sreturns',preturn:'preturns',cpay:'cpays',spay:'spays',cash:'cashes'};
 const SHARED=['shop','addr','phone','gstin','dl','terms','paper'];
 const CAN={owner:k=>true,manager:k=>k!='opening',staff:k=>k=='sale'||k=='cpay'};
 var CL=DEMO?null:JSON.parse(localStorage.asmaCloud||'null'),SY={busy:false,last:'',err:'',t:0,again:false};
