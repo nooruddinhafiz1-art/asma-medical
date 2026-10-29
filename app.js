@@ -1,4 +1,5 @@
-const VER='0.9.14';
+const VER='0.9.15';
+const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -24,16 +25,16 @@ Object.assign(TR.hi,{"H1 Register":"H1 रजिस्टर","Schedule H1":"श
 function setLang(v){L=v;localStorage.lang2=v;nav();ME?go(cur):pLogin()}
 
 // ---------- data ----------
-if(globalThis.__IDBERR&&!localStorage.asma&&localStorage.asmaIDB){alert('Saved data could not be opened (browser storage error). Do NOT enter new bills. Close all browser windows and start again. If it repeats, call UltraAccounting 7602292599.');throw new Error('storage')}
-let D=JSON.parse(localStorage.asma||globalThis.__ASMA||'null');globalThis.__ASMA=null;
+if(globalThis.__IDBERR&&!localStorage[SK]&&localStorage[SK+'IDB']){alert('Saved data could not be opened (browser storage error). Do NOT enter new bills. Close all browser windows and start again. If it repeats, call UltraAccounting 7602292599.');throw new Error('storage')}
+let D=JSON.parse(localStorage[SK]||globalThis.__ASMA||'null');globalThis.__ASMA=null;
 const DS={err:''};
-function lsWrite(str){try{localStorage.asma=str;DS.err='';return true}catch(e){if(DS.err!='full'){DS.err='full';setTimeout(()=>{try{whoUI()}catch(e){}},0);alert('⚠ STORAGE FULL - the last change could NOT be saved on this computer!\nDownload a backup now (Settings → Backup) and call UltraAccounting 7602292599.')}return false}}
+function lsWrite(str){try{localStorage[SK]=str;DS.err='';return true}catch(e){if(DS.err!='full'){DS.err='full';setTimeout(()=>{try{whoUI()}catch(e){}},0);alert('⚠ STORAGE FULL - the last change could NOT be saved on this computer!\nDownload a backup now (Settings → Backup) and call UltraAccounting 7602292599.')}return false}}
 function persist(){const str=JSON.stringify(D);const db=globalThis.__IDB;if(!db)return Promise.resolve(lsWrite(str));
- return new Promise(res=>{try{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(str,'asma');tx.oncomplete=()=>{try{localStorage.asmaIDB='1';localStorage.removeItem('asma')}catch(e){}DS.err='';res(true)};tx.onerror=tx.onabort=()=>res(lsWrite(str))}catch(e){res(lsWrite(str))}})}
-function wipeLocal(){localStorage.removeItem('asma');const db=globalThis.__IDB;if(!db)return Promise.resolve();return new Promise(r=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').delete('asma');tx.oncomplete=tx.onerror=()=>r()})}
+ return new Promise(res=>{try{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(str,'asma');tx.oncomplete=()=>{try{localStorage[SK+'IDB']='1';localStorage.removeItem(SK)}catch(e){}DS.err='';res(true)};tx.onerror=tx.onabort=()=>res(lsWrite(str))}catch(e){res(lsWrite(str))}})}
+function wipeLocal(){localStorage.removeItem(SK);const db=globalThis.__IDB;if(!db)return Promise.resolve();return new Promise(r=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').delete('asma');tx.oncomplete=tx.onerror=()=>r()})}
 let AB={ok:null,last:'',t:0};
 function save(raw){persist();clearTimeout(AB.t);AB.t=setTimeout(autoBk,4000);if(!raw&&globalThis.syncSoon)syncSoon()}
-async function autoBk(){if(!/^https?:$/.test((globalThis.location||{}).protocol||'')||!ME||!D.users.some(u=>u.pinH)||!D.settings.dbId)return;try{const r=await fetch('backup',{method:'POST',headers:{'Content-Type':'application/json','X-Asma-Db':D.settings.dbId},body:JSON.stringify(D)});AB.ok=r.ok;AB.err='';if(!r.ok){const tx=await r.text();try{AB.err=JSON.parse(tx).error||tx}catch(e){AB.err=r.status==501?'':tx}}if(r.ok){const j=await r.json();AB.last=new Date().toTimeString().slice(0,5);AB.file=j.file;localStorage.asmaAB=today()+' '+AB.last}}catch(e){AB.ok=false}}
+async function autoBk(){if(DEMO)return;if(!/^https?:$/.test((globalThis.location||{}).protocol||'')||!ME||!D.users.some(u=>u.pinH)||!D.settings.dbId)return;try{const r=await fetch('backup',{method:'POST',headers:{'Content-Type':'application/json','X-Asma-Db':D.settings.dbId},body:JSON.stringify(D)});AB.ok=r.ok;AB.err='';if(!r.ok){const tx=await r.text();try{AB.err=JSON.parse(tx).error||tx}catch(e){AB.err=r.status==501?'':tx}}if(r.ok){const j=await r.json();AB.last=new Date().toTimeString().slice(0,5);AB.file=j.file;localStorage.asmaAB=today()+' '+AB.last}}catch(e){AB.ok=false}}
 function seed(){
  const m=[ // name, salt, company, category, zone, rack, gst, mrp(per strip/unit), purchase rate, reorder
  ['Montair LC Tab','Montelukast 10mg + Levocetirizine 5mg','Cipla','Respiratory','East',1,12,245,170,10],
@@ -76,7 +77,170 @@ function seed(){
   const e=i%9==0?add(-1):i%5==0?add(2):add(8+(i%12)); // some expired / near-expiry for demo
   D.batches.push({id:uid()+'b'+i,itemId:id,batch:'B'+(2400+i*13),exp:e,qty:q,ptr:r[8],mrp:r[7]});});
  save()}
-if(!D)seed();
+// ---------- DEMO shop: full sample data, kept only in this browser (separate store, never synced) ----------
+function demoSeed(){
+ let sd=20261029;const rnd=()=>{sd=(sd*1103515245+12345)%2147483648;return sd/2147483648},pick=a=>a[Math.floor(rnd()*a.length)],ri=(a,b)=>a+Math.floor(rnd()*(b-a+1));
+ const dt=k=>{const x=new Date();x.setDate(x.getDate()+k);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0')};
+ const mo=k=>{const n=new Date(),x=new Date(n.getFullYear(),n.getMonth()+k,1);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')};
+ // name, salt, company, category, zone, rack, gst, mrp, rate, reorder, pack, hsn
+ const M=[
+ ['Montair LC Tab','Montelukast 10mg + Levocetirizine 5mg','Cipla','Respiratory','East',1,12,245,170,10,10],
+ ['Montek LC Tab','Montelukast 10mg + Levocetirizine 5mg','Sun Pharma','Respiratory','East',1,12,230,160,10,10],
+ ['Deriphyllin Retard 150','Etofylline + Theophylline','Zydus','Respiratory','East',1,12,48,33,10,10],
+ ['Doxofylline 400 Tab (Doxolin)','Doxofylline 400mg','Lupin','Respiratory','East',1,12,140,98,8,10],
+ ['Asthalin Inhaler 100mcg','Salbutamol','Cipla','Respiratory','East',2,12,155,110,5,1],
+ ['Foracort 200 Inhaler','Formoterol + Budesonide','Cipla','Respiratory','East',2,12,560,400,3,1],
+ ['Seroflo 250 Inhaler','Salmeterol + Fluticasone','Cipla','Respiratory','East',2,12,690,495,3,1],
+ ['Tiova 9mcg Inhaler','Tiotropium','Cipla','Respiratory','East',2,12,410,290,3,1],
+ ['Duolin Respules','Levosalbutamol + Ipratropium','Cipla','Respiratory','East',3,12,24,16,20,1],
+ ['Budecort Respules 0.5mg','Budesonide','Cipla','Respiratory','East',3,12,30,21,20,1],
+ ['Zerocap Spacer','Spacer device','Cipla','Device','East',3,12,190,130,2,1],
+ ['Ascoril LS Syrup 100ml','Ambroxol + Levosalbutamol + Guaifenesin','Glenmark','Respiratory','East',4,12,128,90,10,1],
+ ['Grilinctus Syrup 100ml','Dextromethorphan + Chlorpheniramine','Franco-Indian','Respiratory','East',4,12,115,80,8,1],
+ ['Benadryl Syrup 150ml','Diphenhydramine + Ammonium chloride','J&J','Respiratory','East',4,12,135,95,8,1],
+ ['Codistar Syrup 100ml','Codeine + Chlorpheniramine','Lupin','Respiratory','East',5,12,98,68,4,1],
+ ['Azithral 500 Tab','Azithromycin 500mg','Alembic','Antibiotic','West',1,12,119,82,10,5],
+ ['Augmentin 625 Duo','Amoxicillin + Clavulanic acid','GSK','Antibiotic','West',1,12,223,158,10,10],
+ ['Taxim-O 200 Tab','Cefixime 200mg','Alkem','Antibiotic','West',1,12,109,76,10,10],
+ ['Zifi 200 Tab','Cefixime 200mg','FDC','Antibiotic','West',1,12,105,73,10,10],
+ ['Cefpodoxime 200 Tab (Cepodem)','Cefpodoxime 200mg','Sun Pharma','Antibiotic','West',1,12,168,118,6,10],
+ ['Levoflox 500 Tab','Levofloxacin 500mg','Cipla','Antibiotic','West',2,12,98,68,10,5],
+ ['Ciplox 500 Tab','Ciprofloxacin 500mg','Cipla','Antibiotic','West',2,12,45,31,10,10],
+ ['Doxy-1 L-DR Forte Cap','Doxycycline + Lactic acid bacillus','USV','Antibiotic','West',2,12,120,84,8,10],
+ ['Mox 500 Cap','Amoxicillin 500mg','Sun Pharma','Antibiotic','West',2,12,95,66,10,10],
+ ['Monocef 1g Inj','Ceftriaxone 1g','Aristo','Antibiotic','West',4,12,56,39,10,1],
+ ['AKT-4 Kit','Rifampicin + Isoniazid + Pyrazinamide + Ethambutol','Lupin','TB / Chest','West',3,5,95,66,5,1],
+ ['Forecox Tab','Rifampicin + Isoniazid + Pyrazinamide + Ethambutol','Macleods','TB / Chest','West',3,5,88,61,5,10],
+ ['Allegra 120 Tab','Fexofenadine 120mg','Sanofi','Allergy','West',3,12,225,158,10,10],
+ ['Levocet 5 Tab','Levocetirizine 5mg','Hetero','Allergy','West',3,12,35,24,15,10],
+ ['Avil 25 Tab','Pheniramine 25mg','Sanofi','Allergy','West',3,12,12,8,10,15],
+ ['Dolo 650 Tab','Paracetamol 650mg','Micro Labs','Fever / Pain','North',1,12,34,23,30,15],
+ ['Calpol 650 Tab','Paracetamol 650mg','GSK','Fever / Pain','North',1,12,32,22,20,15],
+ ['Crocin Advance Tab','Paracetamol 500mg','GSK','Fever / Pain','North',1,12,22,15,20,15],
+ ['Calpol Syrup 60ml','Paracetamol 250mg/5ml','GSK','Fever / Pain','North',1,12,48,33,10,1],
+ ['Zerodol SP Tab','Aceclofenac + Paracetamol + Serratiopeptidase','Ipca','Fever / Pain','North',2,12,120,84,10,10],
+ ['Combiflam Tab','Ibuprofen + Paracetamol','Sanofi','Fever / Pain','North',2,12,42,29,15,20],
+ ['Ultracet Tab','Tramadol 37.5mg + Paracetamol 325mg','Janssen','Fever / Pain','North',2,12,205,143,5,15],
+ ['Volini Gel 30g','Diclofenac + Methyl salicylate','Sun Pharma','Fever / Pain','North',2,18,135,95,6,1],
+ ['Meftal Spas Tab','Mefenamic acid + Dicyclomine','Blue Cross','Fever / Pain','North',2,12,48,33,10,10],
+ ['Pan 40 Tab','Pantoprazole 40mg','Alkem','Gastro','North',3,12,155,108,15,15],
+ ['Pan D Cap','Pantoprazole + Domperidone','Alkem','Gastro','North',3,12,199,139,15,15],
+ ['Rantac 150 Tab','Ranitidine 150mg','J B Chem','Gastro','North',3,12,36,25,15,30],
+ ['Omez 20 Cap','Omeprazole 20mg','Dr Reddys','Gastro','North',3,12,62,43,10,20],
+ ['Digene Gel 200ml','Antacid (Magaldrate + Simethicone)','Abbott','Gastro','North',4,12,148,104,6,1],
+ ['Electral ORS','ORS (WHO)','FDC','Gastro','North',4,12,22,15,30,1],
+ ['Ondem 4 Tab','Ondansetron 4mg','Alkem','Gastro','North',4,12,58,40,10,10],
+ ['Sporlac DS Tab','Lactic acid bacillus','Sanofi','Gastro','North',4,12,72,50,8,10],
+ ['Cremaffin Plus Syrup','Liquid paraffin + Milk of magnesia + Sodium picosulfate','Abbott','Gastro','North',4,12,215,150,4,1],
+ ['Glycomet 500 SR','Metformin 500mg','USV','Diabetes','South',1,12,32,22,20,10],
+ ['Glycomet GP 1 Tab','Glimepiride 1mg + Metformin 500mg','USV','Diabetes','South',1,12,104,72,15,15],
+ ['Janumet 50/500','Sitagliptin + Metformin','MSD','Diabetes','South',1,12,390,280,5,15],
+ ['Amaryl 1mg Tab','Glimepiride 1mg','Sanofi','Diabetes','South',2,12,138,96,10,30],
+ ['Galvus Met 50/500','Vildagliptin + Metformin','Novartis','Diabetes','South',2,12,330,236,5,15],
+ ['Huminsulin 30/70 Pen','Human insulin','Lilly','Diabetes','South',2,5,560,420,3,1],
+ ['Accu-Chek Active Strips 50','Glucose test strips','Roche','Device','South',2,12,1150,860,2,1],
+ ['Telma 40 Tab','Telmisartan 40mg','Glenmark','Heart / BP','South',3,12,232,162,10,15],
+ ['Telma AM Tab','Telmisartan + Amlodipine','Glenmark','Heart / BP','South',3,12,250,175,8,15],
+ ['Amlokind 5 Tab','Amlodipine 5mg','Mankind','Heart / BP','South',3,12,30,20,15,10],
+ ['Losar 50 Tab','Losartan 50mg','Unichem','Heart / BP','South',3,12,98,68,8,10],
+ ['Ecosprin 75 Tab','Aspirin 75mg','USV','Heart / BP','South',4,12,5,3,30,14],
+ ['Atorva 10 Tab','Atorvastatin 10mg','Zydus','Heart / BP','South',4,12,105,72,10,15],
+ ['Rosuvas 10 Tab','Rosuvastatin 10mg','Sun Pharma','Heart / BP','South',4,12,265,185,6,15],
+ ['Clopilet 75 Tab','Clopidogrel 75mg','Sun Pharma','Heart / BP','South',4,12,92,64,8,15],
+ ['Thyronorm 50mcg','Thyroxine 50mcg','Abbott','Thyroid','South',5,12,190,133,6,100],
+ ['Shelcal 500 Tab','Calcium + Vitamin D3','Torrent','Vitamins','West',5,12,128,88,10,15],
+ ['Becosules Cap','Vitamin B-complex + C','Pfizer','Vitamins','West',5,12,49,34,15,20],
+ ['Neurobion Forte Tab','Vitamin B1 + B6 + B12','P&G','Vitamins','West',6,12,36,25,15,30],
+ ['Limcee 500 Tab','Vitamin C 500mg','Abbott','Vitamins','West',6,12,25,17,10,15],
+ ['Zincovit Tab','Multivitamin + Zinc','Apex','Vitamins','West',6,12,110,77,10,15],
+ ['Uprise D3 60K Cap','Cholecalciferol 60000 IU','Alkem','Vitamins','West',6,12,128,90,8,4],
+ ['Dexorange Syrup 200ml','Iron + Folic acid + B12','Franco-Indian','Vitamins','West',6,12,186,130,5,1],
+ ['Alprax 0.25 Tab','Alprazolam 0.25mg','Torrent','Neuro / Sleep','North',6,12,38,26,5,15],
+ ['Valium 5 Tab','Diazepam 5mg','Piramal','Neuro / Sleep','North',6,12,28,19,4,10],
+ ['Zolfresh 10 Tab','Zolpidem 10mg','Abbott','Neuro / Sleep','North',6,12,110,77,4,10],
+ ['Gabapin NT Tab','Gabapentin + Nortriptyline','Intas','Neuro / Sleep','North',6,12,198,138,5,10],
+ ['Betadine Ointment 15g','Povidone iodine 5%','Win Medicare','Skin','East',6,12,98,68,6,1],
+ ['Candid Cream 20g','Clotrimazole 1%','Glenmark','Skin','East',6,18,99,69,6,1],
+ ['Soframycin Cream 30g','Framycetin','Sanofi','Skin','East',6,12,78,54,6,1],
+ ['Lulifin Cream 30g','Luliconazole 1%','Sun Pharma','Skin','East',7,18,365,255,3,1],
+ ['Otrivin Nasal Drops','Xylometazoline 0.1%','GSK','ENT / Eye','East',7,12,98,68,6,1],
+ ['Moxicip Eye Drops','Moxifloxacin 0.5%','Cipla','ENT / Eye','East',7,12,112,78,5,1],
+ ['Refresh Tears 10ml','Carboxymethylcellulose 0.5%','Allergan','ENT / Eye','East',7,12,165,115,4,1],
+ ['Dettol Liquid 250ml','Chloroxylenol','Reckitt','General','East',8,18,145,110,6,1],
+ ['Savlon Antiseptic 200ml','Chlorhexidine + Cetrimide','ITC','General','East',8,18,98,72,6,1],
+ ['Band-Aid 10s','Adhesive bandage','J&J','Surgical','South',8,12,30,20,10,1],
+ ['Crepe Bandage 10cm','Cotton crepe bandage','Generic','Surgical','South',8,12,95,55,5,1],
+ ['Syringe 5ml (Dispovan)','Disposable syringe','HMD','Surgical','South',8,12,12,7,50,1],
+ ['Surgical Mask 3-ply (50)','Face mask','Generic','Surgical','South',8,5,250,150,3,1],
+ ['Omron BP Monitor HEM-7120','BP monitor','Omron','Device','South',7,18,2780,2050,1,1],
+ ['Dr Morepen Thermometer','Digital thermometer','Morepen','Device','South',7,18,250,160,3,1],
+ ['Pulse Oximeter (BPL)','Pulse oximeter','BPL','Device','South',7,12,1499,950,1,1],
+ ['Lactogen 1 400g','Infant formula','Nestle','Baby care','West',7,18,445,395,4,1],
+ ['Cerelac Wheat 300g','Infant cereal','Nestle','Baby care','West',7,18,265,235,4,1],
+ ['Ensure Vanilla 400g','Nutrition powder','Abbott','Nutrition','West',8,18,780,680,3,1],
+ ['Protinex Original 250g','Protein powder','Danone','Nutrition','West',8,18,520,450,3,1],
+ ['Whisper Ultra XL 15','Sanitary pads','P&G','Women care','West',8,12,185,150,5,1],
+ ['Folvite 5 Tab','Folic acid 5mg','Pfizer','Women care','West',8,12,45,31,8,30],
+ ['Mifty Kit (Rx only)','Mifepristone + Misoprostol','Mankind','Women care','West',8,12,499,350,1,1],
+ ['Prega News Kit','Pregnancy test kit','Mankind','Women care','West',8,12,60,40,8,1]];
+ const HSN={Device:'9018',Surgical:'3005','Baby care':'1901',Nutrition:'2106',General:'3808','Women care':'9619'};
+ D={settings:{shop:'DEMO MEDICAL STORE',addr:'Main Road, Chanchal, Malda, West Bengal 732123',phone:'98000 00000',gstin:'19ABCDE1234F1Z5',dl:'WB/MLD/RX-0000 (demo)',device:'Counter 1',billNo:1,series:'A',paper:'a5',terms:'This is a DEMO bill. Software by UltraAccounting, 7602292599.',packV:2,demo:1,recH:'pbk1$200000$15020c038d54ca5281452a00265ffb26$ebdedfdc12fc7ab9c7ef685b1ae6d35f6003bdebfff1fcf4f946a7aa41da2179'},
+  items:[],batches:[],sales:[],purchases:[],customers:[],sreturns:[],preturns:[],cpays:[],spays:[],openings:[],
+  users:[{id:'d_own',name:'Owner (demo)',role:'owner',pinH:'pbk1$200000$6f1bf491a00c7618805d89314afb5fda$14105b0d12a3b9cdad9530238396213d64ad6c2df4bb82c0ba1d9b6db2411836'},
+   {id:'d_mgr',name:'Rakib (manager)',role:'manager',pinH:'pbk1$200000$76826b2f35454ed3fdd6a8f01cb42ba3$fe38f1cb18181eaef66442fb38b5d67c7a763ac1e2d4f80d5a4d60104eb05e45'},
+   {id:'d_stf',name:'Sumon (staff)',role:'staff',pinH:'pbk1$200000$eb920ce9a30ed461564a03ff1960fb9e$e82d3d0ddf1c515908167b87c10e3708800ba26262f5ace9418d61935a9aa411'},
+   {id:'d_stf2',name:'Priya (staff)',role:'staff',pinH:'pbk1$200000$aa9b1a1ac8208e7d90f687b5c6370ed1$b2fb771ef6dcabae5cdc15da214f082e0342db9e11c1f507a68a8fa08f019830'}]};
+ D.settings.dbId='demo';
+ M.forEach((r,i)=>{const it={id:'dm'+i,name:r[0],salt:r[1],company:r[2],cat:r[3],zone:r[4],rack:r[5],gst:r[6],mrp:r[7],reorder:r[9],pack:r[10],packOk:true,hsn:HSN[r[3]]||'3004'};it.h1=h1Match(it).length>0;if(i%4==0)it.bc='890'+String(1000000000+i*7919).slice(0,10);D.items.push(it)});
+ const SUP=['Malda Pharma Distributors','Chanchal Medical Agency','Sri Durga Drug House, English Bazar','Ma Tara Pharma, Malda','Bengal Medicos, Siliguri'];
+ const DAYS=75,bat={},addB=(it,b,exp,q,ptr,mrp)=>{const k=it.id+'|'+b;if(bat[k]){bat[k].qty+=q}else bat[k]={id:'db'+Object.keys(bat).length,itemId:it.id,batch:b,exp,qty:q,ptr,cost:ptr,mrp}};
+ // opening stock, 75 days ago (a few expired / near-expiry batches on purpose)
+ const op={id:'dop1',date:dt(-DAYS),by:'Owner (demo)',device:'Counter 1',batches:[]};
+ D.items.forEach((it,i)=>{const r=M[i],exp=i%17==3?mo(-1):i%11==5?mo(1):i%7==2?mo(2):mo(ri(7,26)),q=r[9]*ri(2,4)+ri(0,6),b=(it.company.slice(0,2).toUpperCase().replace(/[^A-Z]/g,'X'))+(2400+i*13);
+  op.batches.push({itemId:it.id,batch:b,exp,qty:q,ptr:r[8],cost:r[8],mrp:r[7]});addB(it,b,exp,q,r[8],r[7])});
+ D.openings.push(op);
+ const CUS=[['Abdul Karim','9800011101','Khokra, Harishchandrapur'],['Rina Saha','9800011102','Ranikamat, Chanchal'],['Md. Jamal Hossain','9800011103','Bhingole, Malda'],['Shampa Das','9800011104','Chanchal Bazar'],['Anowar Ali','9800011105','Malatipur, Chanchal'],['Pinki Mondal','9800011106','Ashapur Road, Chanchal'],['Sukumar Roy','9800011107','Samsi, Malda'],['Nasima Bibi','9800011108','Kharba, Malda']];
+ const DR=[['Dr. R. K. Saha (MBBS, MD Chest)','Chanchal Hospital More · WBMC 54321'],['Dr. A. Rahman (MBBS)','Station Road, Harishchandrapur · WBMC 61208'],['Dr. P. Mondal (MD Medicine)','Malda Medical College · WBMC 47715'],['Dr. N. Sarkar (MBBS, DCH)','Chanchal Bazar · WBMC 58830']];
+ const by=['Owner (demo)','Rakib (manager)','Sumon (staff)','Sumon (staff)','Priya (staff)','Priya (staff)'];
+ const live=it=>Object.values(bat).filter(b=>b.itemId==it.id&&b.qty>1e-9&&b.exp>=mo(0)).sort((a,b)=>a.exp.localeCompare(b.exp));
+ const stock=it=>live(it).reduce((a,b)=>a+b.qty,0);
+ const pop=D.items.map((it,i)=>it.h1?1:i<75?(it.reorder>=15?6:it.reorder>=10?4:2):1);const bag=[];D.items.forEach((it,i)=>{for(let k=0;k<pop[i];k++)bag.push(it)});
+ const r2d=x=>Math.round(x*100)/100;let pinv=1000,srn=0,prn=0,uidn=0;const nid=p=>p+(uidn++).toString(36);
+ for(let d=-DAYS+1;d<=0;d++){const date=dt(d),dow=new Date(date).getDay();
+  // supplier purchase roughly every 4 days
+  if((d%4==0&&d<-8)||d==-DAYS+1){const sup=SUP[(d+DAYS)%SUP.length],lines=[];
+   const low=D.items.filter(it=>stock(it)<=it.reorder*1.5);const want=[...new Set([...low,...Array.from({length:ri(3,6)},()=>pick(D.items))])].slice(0,12);
+   want.forEach(it=>{const i=D.items.indexOf(it),r=M[i],q=r[9]*ri(2,3),fr=q>=20&&rnd()<.4?Math.floor(q/10):0,b=it.company.slice(0,2).toUpperCase().replace(/[^A-Z]/g,'X')+(3000+(d+DAYS)*7+i),exp=mo(ri(10,30));lines.push({itemId:it.id,batch:b,exp,qty:q,free:fr,ptr:r[8],mrp:r[7],gst:it.gst});addB(it,b,exp,q+fr,q+fr?r2d(r[8]*q/(q+fr)):r[8],r[7])});
+   const tv=lines.reduce((a,l)=>a+l.qty*l.ptr,0),tx=lines.reduce((a,l)=>a+l.qty*l.ptr*l.gst/100,0),tot=Math.round(tv+tx),paid=rnd()<.5?tot:rnd()<.5?Math.round(tot/2/100)*100:0;
+   D.purchases.push({id:nid('dp'),date,supplier:sup,inv:'INV-'+(pinv++),lines,taxable:tv,gst:tx,total:tot,paid,pmode:pick(['Cash','UPI','Bank','Cheque']),device:'Counter 1',by:d%8==0?'Rakib (manager)':'Owner (demo)'})}
+  // bills of the day
+  const nb=dow==0?ri(3,6):ri(5,11);const nowM=new Date().getHours()*60+new Date().getMinutes(),hi=d==0?Math.max(9*60+5,Math.min(21*60+30,nowM-5)):21*60+30,times=Array.from({length:d==0?Math.max(1,Math.round(nb*(hi-540)/750)):nb},()=>ri(9*60,hi)).sort((a,b)=>a-b);
+  for(const tm of times){const n=ri(1,4),pk=new Set();while(pk.size<n)pk.add(pick(bag));const lines=[];let disc=rnd()<.25?pick([5,10]):0;
+   for(const it of pk){if(it.h1&&rnd()<.55)continue;const loose=it.pack>1&&rnd()<.3;let need=loose?ri(2,Math.min(6,it.pack-1))/it.pack:ri(1,it.mrp>500?1:3);if(stock(it)<need-1e-9)continue;
+    for(const b of live(it)){if(need<=1e-9)break;const take=Math.round(Math.min(need,b.qty)*1e6)/1e6;b.qty=Math.round((b.qty-take)*1e6)/1e6;need=Math.round((need-take)*1e6)/1e6;lines.push({itemId:it.id,name:it.name,batch:b.batch,exp:b.exp,qty:take,loose,mrp:it.mrp,gst:it.gst,ptr:b.cost,amt:take*it.mrp*(1-disc/100),...(isH1(it)?{h1:1}:{})})}}
+   if(!lines.length)continue;
+   const h1=lines.some(l=>l.h1),u=rnd(),cu=pick(CUS),dr=pick(DR);let pay=u<.58?'Cash':u<.88?'UPI':u<.94?'Card':'Credit';
+   const s={id:nid('ds'),ser:'A',no:D.settings.billNo++,date,time:String(Math.floor(tm/60)).padStart(2,'0')+':'+String(tm%60).padStart(2,'0'),cust:'',phone:'',dr:'',gstin:'',pay,disc,device:rnd()<.7?'Counter 1':'Counter 2',by:pick(by),lines,total:Math.round(lines.reduce((a,l)=>a+l.amt,0)),gst:lines.reduce((a,l)=>a+l.amt-l.amt/(1+l.gst/100),0)};
+   if(pay=='Credit'||h1||rnd()<.35){s.cust=cu[0];s.phone=cu[1]}
+   if(h1||rnd()<.3)s.dr=dr[0];
+   if(h1){s.h1=1;s.padr=cu[2];s.dadr=dr[1]}
+   if(!h1&&pay!='Credit'&&rnd()<.03){s.cust='Chanchal Nursing Home';s.phone='9800011199';s.gstin='19AAAFC1234K1Z2';s.pay='UPI'}
+   D.sales.push(s)}
+  // udhaar received now and then
+  if(d%6==0){const cd={};D.sales.filter(s=>s.pay=='Credit').forEach(s=>{cd[s.phone]=cd[s.phone]||{n:s.cust,a:0};cd[s.phone].a+=s.total});D.cpays.forEach(p=>{if(cd[p.phone])cd[p.phone].a-=p.amt});
+   const ow=Object.entries(cd).filter(x=>x[1].a>100);if(ow.length){const[p,x]=pick(ow);D.cpays.push({id:nid('dc'),date,phone:p,name:x.n,amt:Math.round(x.a*(rnd()<.5?1:.5)),mode:pick(['Cash','UPI']),by:'Owner (demo)'})}}
+  // pay a supplier now and then
+  if(d%9==0){const sd={};D.purchases.forEach(p=>{sd[p.supplier]=(sd[p.supplier]||0)+p.total-(p.paid||0)});D.spays.forEach(p=>sd[p.supplier]-=p.amt);const ow=Object.entries(sd).filter(x=>x[1]>500);if(ow.length){const[n,a]=pick(ow);D.spays.push({id:nid('dsp'),date,supplier:n,amt:Math.round(a*.6/100)*100,mode:pick(['Bank','Cheque','UPI']),by:'Owner (demo)'})}}
+  // a sale return now and then (customer brought back one strip)
+  if(d%11==0&&D.sales.length>5){const sl=D.sales[D.sales.length-ri(2,5)],k=0,l=sl.lines[k];if(l&&!l.loose&&l.qty>=1){const q=1,f=sl.total/(sl.lines.reduce((a,x)=>a+x.amt,0)||1),a=r2d(l.amt*f*q/l.qty);const b=bat[l.itemId+'|'+l.batch];if(b)b.qty+=q;
+   D.sreturns.push({id:nid('dr'),no:++srn,date,saleId:sl.id,billNo:'A-'+sl.no,cust:sl.cust,phone:sl.phone,lines:[{k,itemId:l.itemId,name:l.name,batch:l.batch,exp:l.exp,qty:q,amt:a,gst:l.gst,ptr:l.ptr}],amt:a,gst:a-a/(1+l.gst/100),mode:sl.pay=='Credit'?'Adjust in udhaar':'Cash refund',by:'Rakib (manager)'})}}}
+ // expired stock sent back to the supplier (purchase return)
+ Object.values(bat).filter(b=>b.exp<mo(0)&&b.qty>0).slice(0,2).forEach(b=>{const it=D.items.find(x=>x.id==b.itemId),q=Math.min(b.qty,Math.max(1,Math.floor(b.qty/2))),tv=q*b.ptr,tx=tv*it.gst/100;b.qty=Math.round((b.qty-q)*1e6)/1e6;
+  D.preturns.push({id:nid('dpr'),no:++prn,date:dt(-3),supplier:SUP[0],reason:'Expiry',lines:[{itemId:it.id,name:it.name,batch:b.batch,exp:b.exp,qty:q,ptr:b.ptr,cost:b.cost,gst:it.gst}],amt:r2d(tv+tx),gst:tx,by:'Owner (demo)'})});
+ D.batches=Object.values(bat);
+ persist()}
+
+if(!D){if(DEMO)demoSeed();else seed()}
 if(!D.users){D.users=[{id:'u1',name:'Owner',role:'owner'}];save()}
 ['cpays','spays','sreturns','preturns','openings'].forEach(k=>D[k]=D[k]||[]);
 if(!D.settings.packV){const PK={'Montair LC Tab':10,'Montek LC Tab':10,'Deriphyllin Retard 150':10,'Azithral 500 Tab':5,'Augmentin 625 Duo':10,'Allegra 120 Tab':10,'Dolo 650 Tab':15,'Calpol 650 Tab':15,'Zerodol SP Tab':10,'Pan 40 Tab':15,'Pan D Cap':15,'Glycomet 500 SR':10,'Janumet 50/500':15,'Amaryl 1mg Tab':30,'Telma 40 Tab':15,'Amlokind 5 Tab':10,'Ecosprin 75 Tab':14,'Atorva 10 Tab':15,'Shelcal 500 Tab':15,'Becosules Cap':20,'Neurobion Forte Tab':30};
@@ -102,7 +266,7 @@ async function migratePins(){let ch=0;for(const u of D.users)if(u.pin){u.pinH=aw
 const ACL={owner:['search','bill','purchase','stock','expiry','order','returns','dues','reports','h1','cloud','settings','help'],manager:['search','bill','purchase','stock','expiry','order','returns','dues','reports','h1','cloud','help'],staff:['search','bill','expiry','cloud','help']};
 const RK={staff:1,manager:2,owner:3};
 function eRole(){if(!ME)return'staff';const r=ME.role;return(CL&&CL.shop&&CL.role&&RK[CL.role]<RK[r])?CL.role:r}
-let ME=D.users.find(u=>u.id==sessionStorage.uid)||null;
+let ME=D.users.find(u=>u.id==sessionStorage[UK])||null;
 if(ME)setTimeout(autoBk,1500);
 function pLogin(){if(!D.users.some(u=>u.pinH))return pSetup();$('#nav').innerHTML='';$('#who').innerHTML='';
  $('#main').innerHTML=LWRAP(`<div class=card style="text-align:center;margin:0"><img src="logo.png" style="height:90px"><h3>${t('Login')}</h3>
@@ -118,11 +282,11 @@ async function makeRec(){const k=recKey();D.settings.recH=await hashPin({id:'rec
 async function forgotPin(){if(!D.settings.recH){if(confirm('No recovery key on this device.\n\nOK = login with Owner email + password (cloud). Your real PIN and data will come from the cloud.'))pJoin();return}const k=(prompt('Enter Owner recovery key (XXXX-XXXX-XXXX)')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/(.{4})(?=.)/g,'$1-');
  if(!await checkPin({id:'recovery'},k,D.settings.recH))return alert('Wrong recovery key');const a=prompt('New Owner PIN (4–6 digits)');if(!/^\d{4,6}$/.test(a||''))return alert('4–6 digits only');if(prompt('Repeat new PIN')!==a)return alert('PINs do not match');
  const o=D.users.find(u=>u.role=='owner');o.pinH=await hashPin(o,a);save();await makeRec();alert('Owner PIN changed. A new recovery key was made; the old one no longer works.');pLogin()}
-async function doSetup(){const a=$('#s1').value,b=$('#s2').value;if(!/^\d{4,6}$/.test(a))return alert('4–6 digits only');if(a!==b)return alert('PINs do not match');const o=D.users.find(u=>u.role=='owner')||D.users[0];o.pinH=await hashPin(o,a);save();await makeRec();ME=o;sessionStorage.uid=o.id;whoUI();go(ACL[o.role][0])}
+async function doSetup(){const a=$('#s1').value,b=$('#s2').value;if(!/^\d{4,6}$/.test(a))return alert('4–6 digits only');if(a!==b)return alert('PINs do not match');const o=D.users.find(u=>u.role=='owner')||D.users[0];o.pinH=await hashPin(o,a);save();await makeRec();ME=o;sessionStorage[UK]=o.id;whoUI();go(ACL[o.role][0])}
 async function doLogin(){const u=D.users.find(x=>x.id==$('#lu').value);const pin=$('#lp').value;if(!u||!u.pinH||!await checkPin(u,pin,u.pinH))return alert('Wrong PIN');
  if(!String(u.pinH).startsWith('pbk1$')&&!(CL&&CL.shop&&CL.role!='owner')){const nh=await hashPin(u,pin);if(nh.startsWith('pbk1$')){u.pinH=nh;save()}}
- ME=u;sessionStorage.uid=u.id;whoUI();go(ACL[eRole()][0]);if(u.role!='staff'&&pin.length<6)setTimeout(()=>alert('Tip: your '+u.role+' PIN has only '+pin.length+' digits. Use a 6-digit PIN (Settings → change PIN) - it is much harder to guess.'),300);if(u.role=='owner'&&!D.settings.recH){alert('Important: make an Owner recovery key now. It is the only way to reset the Owner PIN if it is forgotten.');await makeRec()}setTimeout(autoBk,1500)}
-function logout(){ME=null;sessionStorage.removeItem('uid');pLogin()}
+ ME=u;sessionStorage[UK]=u.id;whoUI();go(ACL[eRole()][0]);if(!DEMO&&u.role!='staff'&&pin.length<6)setTimeout(()=>alert('Tip: your '+u.role+' PIN has only '+pin.length+' digits. Use a 6-digit PIN (Settings → change PIN) - it is much harder to guess.'),300);if(u.role=='owner'&&!D.settings.recH){alert('Important: make an Owner recovery key now. It is the only way to reset the Owner PIN if it is forgotten.');await makeRec()}setTimeout(autoBk,1500)}
+function logout(){ME=null;sessionStorage.removeItem(UK);pLogin()}
 function whoUI(){$('#who').innerHTML=(DS.err=='full'?`<span class=pill style="background:#d32f2f;color:#fff">⚠ NOT SAVED - storage full</span> `:'')+(ME?`<span class=pill style="background:#fff3e0;color:#b45f06">👤 ${esc(ME.name)} · ${eRole()}${eRole()!=ME.role?' (cloud limit)':''}</span> <button class=b style="padding:6px 10px" onclick="logout()">Logout</button> ${syncPill()}`:'')}
 
 // ---------- helpers ----------
@@ -413,8 +577,8 @@ function sPay(n){const x=supDues().find(y=>y.name==n);const a=Math.round((+promp
 const KINDS={opening:'openings',sale:'sales',purchase:'purchases',sreturn:'sreturns',preturn:'preturns',cpay:'cpays',spay:'spays'};
 const SHARED=['shop','addr','phone','gstin','dl','terms','paper'];
 const CAN={owner:k=>true,manager:k=>k!='opening',staff:k=>k=='sale'||k=='cpay'};
-var CL=JSON.parse(localStorage.asmaCloud||'null'),SY={busy:false,last:'',err:'',t:0,again:false};
-const clSave=()=>localStorage.asmaCloud=JSON.stringify(CL);
+var CL=DEMO?null:JSON.parse(localStorage.asmaCloud||'null'),SY={busy:false,last:'',err:'',t:0,again:false};
+const clSave=()=>{if(!DEMO)localStorage.asmaCloud=JSON.stringify(CL)};
 const strip=o=>{const c={...o};delete c._s;delete c._d;return c};
 const pending=()=>Object.values(KINDS).reduce((a,k)=>a+(D[k]||[]).filter(x=>!x._s).length,0)+(CL&&CL.role!='staff'?D.items.filter(i=>i._d).length:0);
 function syncPill(){if(!CL||!CL.shop)return'';const p=pending();return`<span class=pill style="background:${SY.err?'#fde8e8':p?'#fff8e1':'#e7f6ec'};color:#333" title="${esc(SY.err)}">☁ ${SY.err?(SY.err=='offline'?'offline':'sync problem'):p?p+' to upload':'synced '+SY.last}</span>`}
@@ -475,7 +639,7 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
    for(const id of (CL.uids||[]).filter(id=>!D.users.some(u=>u.id==id)))await api(`/rest/v1/shop_users?shop_id=eq.${sh}&id=eq.${encodeURIComponent(id)}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
    CL.usH=lu;CL.uids=D.users.map(u=>u.id)}
   else{const ur=await api(`/rest/v1/shop_users?select=id,role,data&shop_id=eq.${sh}`);const us=ur.filter(x=>x.id!='__rec').map(x=>x.data),rc=ur.find(x=>x.id=='__rec');
-   if(us.length){const before=usersOf();D.users=us;D.settings.recH=rc?rc.data.recH:null;if(usersOf()!==before){changed=true;if(ME&&!D.users.some(u=>u.id==ME.id&&u.pinH==ME.pinH)){ME=null;sessionStorage.removeItem('uid')}else if(ME)ME=D.users.find(u=>u.id==ME.id)}CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}}
+   if(us.length){const before=usersOf();D.users=us;D.settings.recH=rc?rc.data.recH:null;if(usersOf()!==before){changed=true;if(ME&&!D.users.some(u=>u.id==ME.id&&u.pinH==ME.pinH)){ME=null;sessionStorage.removeItem(UK)}else if(ME)ME=D.users.find(u=>u.id==ME.id)}CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}}
   if(CL.pull){delete CL.pull;CL.setH=sharedOf();CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}
   clSave();
   if(changed){rebuild();if(D.settings.series){const mx=Math.max(0,...D.sales.filter(x=>(x.ser||'')==D.settings.series).map(x=>+x.no||0));if(mx>=D.settings.billNo)D.settings.billNo=mx+1}}
@@ -484,7 +648,7 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
  }catch(e){SY.err=e.message;save(1)}finally{SY.busy=false;whoUI();if(cur=='cloud'&&$('#clst'))$('#clst').innerHTML=clStatus();if(SY.again){SY.again=false;syncSoon()}}}
 function clStatus(){if(!CL||!CL.at)return'<span class=mut>Not connected</span>';return`Signed in as <b>${esc(CL.email)}</b>${CL.shop?` · shop <b>${esc(CL.shopName||'')}</b> · cloud role <b>${CL.role}</b> · counter <b>${esc(D.settings.series||'-')}</b><br>Last sync: ${SY.last||'-'} · waiting to upload: ${pending()}${(D.rejected||[]).length?` · <span class=red>not allowed, kept aside: ${D.rejected.length}</span>`:''}${SY.err?`<br><span class=red>⚠ ${esc(SY.err)}</span>`:''}`:''}`}
 const CLOUD_DEF={url:'https://oiowfuqtmygebcojnfty.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pb3dmdXF0bXlnZWJjb2puZnR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjU5OTQsImV4cCI6MjEwODcwMTk5NH0.TXMhqJGfvGog-Z78_js6ZwtlDzgPV_hfw_WWnh_bK3U'};
-function pCloud(){const c=CL||{};
+function pCloud(){if(DEMO){$('#main').innerHTML=`<div class=card><h3>☁️ Cloud sync</h3><p>Cloud sync is <b>off in the demo</b>. Demo data stays only in this browser. In a real shop every counter (PC / laptop / phone) shares one live stock through the cloud and keeps working offline.</p></div>`+DEV();return}const c=CL||{};
  $('#main').innerHTML=`<div class=card><h3>☁️ Cloud sync (Supabase)</h3><p id=clst>${clStatus()}</p>
  <p class=mut>All counters share the same bills, stock, udhaar and medicines. Bills are uploaded once and can never be changed or deleted on the server. Each counter needs its own login and its own counter letter (A, B, C…) so bill numbers never clash. The software still works without internet; it uploads when the internet is back.</p></div>
  ${!c.at?`<div class=card><h3>1. Connect</h3><div class=row><label>Supabase Project URL<input id=c_url value="${esc(c.url||CLOUD_DEF.url)}" placeholder="https://xxxx.supabase.co"></label><label>anon public key<input id=c_key value="${esc(c.key||CLOUD_DEF.key)}"></label></div>
@@ -564,8 +728,9 @@ const FLIST=[["🧾","Fast billing","Keyboard-only bills, F2 search, print A4 / 
 const UAB=()=>`<div class=uab><img src="ua-logo.png" alt="UltraAccounting"><div><small>Software by</small><b>UltraAccounting</b><span>SK Nuruddin · Chanchal, Malda</span></div></div>
  <div class=uaa><a href="tel:+917602292599">📞 7602292599</a><a target=_blank href="https://wa.me/917602292599?text=${encodeURIComponent('UltraAccounting: I would like a demo of software like ASMA MEDICAL')}">💬 WhatsApp</a></div>
  <div class=uat>Software for pharmacy · petrol pump · clinic · shop · accounts</div>`;
+const DEMOC=()=>DEMO?`<div class=card style="border:2px dashed #c62828;background:#fff8f8;margin:0 0 12px;text-align:center"><b class=red>🎬 DEMO SHOP – sample data only</b><div style="font-size:13px;margin-top:6px">Owner PIN <b>1111</b> · Manager <b>2222</b> · Staff <b>3333</b> / <b>4444</b></div><div class=mut style="margin-top:4px">Saved only in this browser, never sent to the cloud. Try anything – Settings → Reload demo data starts fresh.</div><a href="./" class=mut>← Exit demo</a></div>`:(CL&&CL.shop)?'':`<a href="./?demo=1" style="display:block;text-align:center;margin:0 0 12px;padding:10px;border-radius:10px;background:#fff3e0;color:#b45f06;font-weight:700;text-decoration:none;border:1px solid #f3c58a">🎬 Try the demo shop (sample data, no login needed)</a>`;
 const LWRAP=h=>{const fc=f=>`<div class=lf><span>${f[0]}</span><div><b>${f[1]}</b><small>${f[2]}</small></div></div>`;
- return`<div class=lgw><div class=lgs><h4>✨ Features</h4>${FLIST.slice(0,6).map(fc).join('')}</div><div class=lgc>${h}<div class="card uac">${UAB()}</div></div><div class=lgs><h4 class=lgh2>&nbsp;</h4>${FLIST.slice(6).map(fc).join('')}</div></div>`};
+ return`<div class=lgw><div class=lgs><h4>✨ Features</h4>${FLIST.slice(0,6).map(fc).join('')}</div><div class=lgc>${DEMOC()}${h}<div class="card uac">${UAB()}</div></div><div class=lgs><h4 class=lgh2>&nbsp;</h4>${FLIST.slice(6).map(fc).join('')}</div></div>`};
 const FEAT=()=>{const F=FLIST;
  return`<div class=card style="max-width:900px;margin:16px auto"><h3 style="text-align:center;margin:4px 0 12px">✨ ASMA MEDICAL software – features</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px">${F.map(f=>`<div style="background:var(--g2);border-radius:10px;padding:10px 12px"><div style="font-size:22px">${f[0]}</div><b style="color:var(--n)">${f[1]}</b><div class=mut style="margin-top:2px">${f[2]}</div></div>`).join('')}</div></div>`};
 const DEV=()=>`<div class=card style="max-width:520px;margin:16px auto;text-align:center;border:2px solid #0b7a3b">
@@ -593,6 +758,7 @@ addEventListener('keydown',e=>{if(!ME)return;
  if(e.ctrlKey&&e.key=='Delete'){e.preventDefault();B.lines.pop();bDraw();return $('#bi').focus()}
  if(e.key=='Escape'&&document.activeElement.id!='bi'){e.preventDefault();return $('#bi').focus()}
  if(e.altKey){const m={c:'#bc',m:'#bp',o:'#bdr',p:'#bpay',d:'#bd',a:'#bpa'}[e.key.toLowerCase()];if(m&&$(m)){e.preventDefault();$(m).focus();$(m).select&&$(m).select()}}});
+if(DEMO){const T=document.querySelector('header .t');if(T)T.innerHTML='<b>DEMO MEDICAL STORE</b><small>Sample data · Software by UltraAccounting</small>';document.title='DEMO · Pharmacy Software · UltraAccounting';const n=document.getElementById('net');if(n)n.insertAdjacentHTML('beforebegin','<span class=pill style="background:#c62828;color:#fff">DEMO</span>')}
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v='+VER);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
 $('#lng').value=L;netUI();whoUI();migratePins().then(()=>ME?go(ACL[eRole()][0]):pLogin());
@@ -671,11 +837,11 @@ function impAdd(){let n=0,skip=0,made=0;IMP.list.forEach(r=>{if(!r.batch||!r.exp
 
 // ---------- Start real shop + opening stock import ----------
 function wipeBiz(){D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.rejected=[];D.settings.billNo=1;D.settings.realShop=today()}
-async function fullReset(){if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');const on=CL&&CL.shop;if(on&&CL.role!='owner')return alert('Only the cloud owner login can reset the shop.');
+async function fullReset(){if(DEMO)return alert('This is the demo shop. Use Reload demo data to start the demo again.');if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');const on=CL&&CL.shop;if(on&&CL.role!='owner')return alert('Only the cloud owner login can reset the shop.');
  if(prompt('FULL RESET'+(on?' of the shop on ALL counters and the cloud':'')+':\nremoves ALL medicines, stock, bills, purchases, returns and udhaar. Users, PINs, logins and shop details stay. A backup file downloads first.\n\nType RESET to continue:')!=='RESET')return;
  bk();if(on){if(globalThis.navigator&&navigator.onLine===false)return alert('Internet is needed for a cloud reset.');try{const e=await rpc('reset_shop',{p_shop:CL.shop});wipeBiz();CL.ep=e;CL.cur=0;CL.icur='';clSave()}catch(e){return alert('Reset failed: '+e.message)}}else wipeBiz();
  save(1);if(on)sync();alert('Done. The shop is empty. Add medicines from Stock → Import stock list, Purchase, or Stock → New medicine.');go('stock')}
-function startReal(){if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');if(CL&&CL.shop)return alert('Demo is already removed. To empty a connected shop use 🧹 Full reset.');
+function startReal(){if(DEMO)return alert('This is the demo shop. To start a real shop open the main software link.');if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');if(CL&&CL.shop)return alert('Demo is already removed. To empty a connected shop use 🧹 Full reset.');
  if(prompt('This removes ALL medicines, stock, bills, purchases, returns and udhaar. Users, PINs and shop details stay. A backup file downloads first.\n\nType START to continue:')!=='START')return;
  bk();D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.rejected=[];D.settings.billNo=1;D.settings.realShop=today();save(1);alert('Done. Now add your medicines: Stock → Import stock list (Excel/CSV), or Purchase.');go('stock')}
 let STI=null;
