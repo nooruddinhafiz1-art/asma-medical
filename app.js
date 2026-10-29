@@ -1,4 +1,4 @@
-const VER='0.9.17';
+const VER='0.9.18';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -487,8 +487,28 @@ function pReports(){const inR=x=>x.date>=RF.from&&x.date<=RF.to,ss=D.sales.filte
  <div class="card tw"><h3>GST summary</h3><table><tr><th>Output GST (on sales, less returns)</th><th>Input GST / ITC (on purchases, less returns)</th><th>Net GST payable</th></tr><tr><td>${inr(outg)}</td><td>${inr(itc)}</td><td><b class="${outg-itc>0?'red':'grn'}">${inr(outg-itc)}</b></td></tr></table><p class=mut>For guidance only; confirm with your CA before filing.</p><button class=b onclick="gstr1()">⬇ GSTR-1 files (B2CS, HSN, Documents) for this period</button></div>
  <div class=card><b>By payment:</b> ${Object.entries(pay).map(([k,v])=>`${k=='Credit'?'Credit (udhaar)':k}: ${inr(v)}`).join(' · ')||'<span class=mut>No sales in this period.</span>'}<br><b>By user:</b> ${Object.entries(byU).map(([k,v])=>`${esc(k)}: ${inr(v)}`).join(' · ')||'-'}</div>
  ${cashRep(inR)}
+ ${drRep(inR)}
  <div class="card tw"><table><tr><th>${t('Bill')}</th><th>${t('Date')}</th><th>${t('Customer')}</th><th>${t('Items')}</th><th>${t('Pay')}</th><th>${t('Counter / By')}</th><th>${t('Total')}</th><th></th></tr>${ss.slice().reverse().map(s=>`<tr><td>${bn(s)}</td><td>${s.date} ${s.time}</td><td>${esc(s.cust||'-')}</td><td>${s.lines.length}</td><td>${s.pay}</td><td>${esc(s.device)} · ${esc(s.by||'')}</td><td><b>${inr(s.total)}</b></td><td><button class=b onclick="printBill(D.sales.find(x=>x.id=='${s.id}'),true)">🖨</button></td></tr>`).join('')}</table></div>`}
 
+
+// ---------- Doctor-wise referral report (which doctor's prescriptions came to the shop) ----------
+let RDX='';
+function drRows(inR){const P={},key=n=>String(n||'').trim().replace(/^dr\.?\s*/i,'').replace(/\s+/g,' ').toLowerCase();
+ const ret={};D.sreturns.filter(inR).forEach(r=>{if(r.saleId)ret[r.saleId]=(ret[r.saleId]||0)+r.amt});
+ D.sales.filter(inR).forEach(s=>{const k=key(s.dr);if(!k)return;const p=P[k]||(P[k]={name:String(s.dr).trim(),bills:0,sale:0,ret:0,pts:{},meds:{},last:''});
+  p.bills++;p.sale+=s.total;p.ret+=ret[s.id]||0;p.pts[(s.phone||'')+'|'+String(s.cust||'').trim().toLowerCase()]=1;if(s.date>p.last)p.last=s.date;
+  const f=s.total/(s.lines.reduce((a,l)=>a+l.amt,0)||1);s.lines.forEach(l=>{const m=p.meds[l.name]||(p.meds[l.name]={name:l.name,strip:0,tab:0,amt:0,pack:packOf(item(l.itemId))});if(l.loose)m.tab+=Math.round(l.qty*m.pack);else m.strip+=l.qty;m.amt+=l.amt*f})});
+ return Object.values(P).map(p=>{p.np=Object.keys(p.pts).length;p.net=p.sale-p.ret;return p}).sort((a,b)=>b.net-a.net)}
+function drRep(inR){const rs=drRows(inR),nod=D.sales.filter(inR).filter(s=>!String(s.dr||'').trim()),nodT=nod.reduce((a,s)=>a+s.total,0);
+ if(!rs.length&&!nod.length)return'';const sk=n=>esc(n).replace(/'/g,'');
+ return`<div class="card tw"><h3>🩺 Doctor-wise (referred prescriptions)</h3><p class=mut>Bills where a doctor's name was typed on the bill (Alt+O). Same name with or without "Dr." is counted together.${L2('<br>কোন ডাক্তারের প্রেসক্রিপশন থেকে কত বিল হয়েছে।','<br>किस डॉक्टर की पर्ची से कितने बिल और कितनी बिक्री हुई।')}</p>
+ ${rs.length?`<table><tr><th>Doctor</th><th>Patients</th><th>${t('Bills')}</th><th>Sale</th><th>Returns</th><th>Net sale</th><th>Last bill</th><th></th></tr>
+ ${rs.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${p.np}</td><td>${p.bills}</td><td>${inr(p.sale)}</td><td>${p.ret?inr(p.ret):'-'}</td><td><b>${inr(p.net)}</b></td><td>${fmtD(p.last)}</td><td><button class=b onclick="RDX=RDX=='${sk(p.name)}'?'':'${sk(p.name)}';pReports()">💊 Medicines</button></td></tr>
+ ${RDX==sk(p.name)?`<tr><td colspan=8 style="background:#f7f9fc"><b>${esc(p.name)} – medicines sold:</b><table>${Object.values(p.meds).sort((a,b)=>b.amt-a.amt).map(m=>`<tr><td>${esc(m.name)}</td><td>${[m.strip?r2(m.strip)+(m.pack>1?' strip':''):'',m.tab?m.tab+' tab':''].filter(Boolean).join(' + ')}</td><td>${inr(m.amt)}</td></tr>`).join('')}</table></td></tr>`:''}`).join('')}</table>`:'<p class=mut>No bill in this period has a doctor name.</p>'}
+ ${nod.length?`<p class=mut>Without doctor name: ${nod.length} bills · ${inr(nodT)}</p>`:''}<button class=b onclick="drCSV()">⬇ CSV</button></div>`}
+function drCSV(){const inR=x=>x.date>=RF.from&&x.date<=RF.to,rs=drRows(inR),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+ const csv=['Doctor,Patients,Bills,Sale,Returns,Net sale,Last bill'].concat(rs.map(p=>[q(p.name),p.np,p.bills,Math.round(p.sale),Math.round(p.ret),Math.round(p.net),p.last].join(','))).join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download='doctor-wise_'+RF.from+'_'+RF.to+'.csv';a.click()}
 
 // ---------- Counter / staff cash (who billed what, cash handed over, cash still to come) ----------
 let RCX='';
