@@ -1,4 +1,4 @@
-const VER='0.9.19';
+const VER='0.9.20';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -395,7 +395,7 @@ function bh1Draw(){const el=$('#bh1');if(!el)return;const h=bH1(),k=h?'1':'0';if
  ['#bc','#bdr'].forEach(s=>{const x=$(s);if(x&&x.style)x.style.borderColor=h?'#c62828':''})}
 function h1Nav(e,nx){if(e.key!='Enter')return;e.preventDefault();if(nx)return $(nx).focus();const ms=h1Miss();if(ms.length)return $(ms[0][0]).focus();if(B.h1m!=null)return bSave(B.h1m);$('#bi').focus()}
 // last-used doctors (from saved bills, newest first) for quick pick
-function drList(){const m=new Map();for(let i=D.sales.length-1;i>=0&&m.size<40;i--){const s=D.sales[i],k=String(s.dr||'').trim().toLowerCase();if(k&&!m.has(k))m.set(k,{dr:String(s.dr).trim(),dadr:String(s.dadr||'').trim()});else if(k&&!m.get(k).dadr&&s.dadr)m.get(k).dadr=String(s.dadr).trim()}return[...m.values()]}
+function drList(){const m=new Map();(D.settings.doctors||[]).filter(d=>d.on!==false).forEach(d=>{const k=d.name.trim().toLowerCase();if(k&&!m.has(k))m.set(k,{dr:d.name.trim(),dadr:[d.deg,d.reg?'Reg. '+d.reg:'',d.addr].filter(Boolean).join(', ')})});for(let i=D.sales.length-1;i>=0&&m.size<40;i--){const s=D.sales[i],k=String(s.dr||'').trim().toLowerCase();if(k&&!m.has(k))m.set(k,{dr:String(s.dr).trim(),dadr:String(s.dadr||'').trim()});else if(k&&!m.get(k).dadr&&s.dadr)m.get(k).dadr=String(s.dadr).trim()}return[...m.values()]}
 function drPick(){const k=String(B.dr||'').trim().toLowerCase(),d=k&&drList().find(x=>x.dr.toLowerCase()==k);if(d&&d.dadr&&!String(B.dadr||'').trim()){B.dadr=d.dadr;const x=$('#bda');if(x)x.value=d.dadr}}
 function bQty(k,v){const l=B.lines[k];if(!l)return;const i=item(l.itemId);v=String(v).trim();if(/[lt]/i.test(v)){if(packOf(i)<=1)return alert(i.name+' is sold as a whole unit only.');if(!i.packOk)return alert('Set the correct "Tablets per strip" for '+i.name+' first: Stock → press ⚠ check pack. Loose price = MRP ÷ tablets per strip.')}const lo=/[lt]/i.test(v)&&packOf(i)>1,q=Math.max(1,Math.floor(parseFloat(v)||1)),s=stockOf(l.itemId);
  l.loose=lo;l.qty=q;if(stOf(l)>s+1e-9){alert('Only '+fq(i,s)+' in stock.');l.loose=false;l.qty=Math.max(1,Math.floor(s))}bDraw()}
@@ -509,7 +509,7 @@ function pReports(){const inR=x=>x.date>=RF.from&&x.date<=RF.to,ss=D.sales.filte
  const pur=pu.reduce((a,p)=>a+p.total,0),itc=pu.reduce((a,p)=>a+(p.gst||0),0)-pr.reduce((a,r)=>a+(r.gst||0),0),outg=gst-rg;
  const pay={};ss.forEach(s=>pay[s.pay]=(pay[s.pay]||0)+s.total);const byU={};ss.forEach(s=>byU[s.by||'-']=(byU[s.by||'-']||0)+s.total);
  const udh=custDues().reduce((a,c)=>a+Math.max(c.bal,0),0),sdue=supDues().reduce((a,x)=>a+Math.max(x.bal,0),0);
- $('#main').innerHTML=`<div class=card><h3>📈 ${t('Reports')}</h3><div class=row><label>${t('From')}<input type=date value="${RF.from}" onchange="RF.from=this.value;pReports()"></label><label>${t('To')}<input type=date value="${RF.to}" onchange="RF.to=this.value;pReports()"></label><label>&nbsp;<button class=b onclick="RF.from=RF.to=today();pReports()">Today</button></label></div></div>
+ $('#main').innerHTML=`<div class=card><h3>📈 ${t('Reports')}</h3><div class=row><label>${t('From')}<input type=date value="${RF.from}" onchange="RF.from=this.value;pReports()"></label><label>${t('To')}<input type=date value="${RF.to}" onchange="RF.to=this.value;pReports()"></label><label>&nbsp;<span><button class=b onclick="RF.from=RF.to=today();pReports()">Today</button> <button class=b onclick="RF.from=today().slice(0,8)+'01';RF.to=today();pReports()">This month</button> <button class=b onclick="const d=new Date(today().slice(0,8)+'01');d.setMonth(d.getMonth()-1);const f=d.toISOString().slice(0,8)+'01',e=new Date(today().slice(0,8)+'01');e.setDate(0);RF.from=f;RF.to=e.toISOString().slice(0,10);pReports()">Last month</button> <button class=b onclick="RF.from=today().slice(0,5)+'01-01';RF.to=today();pReports()">This year</button> <button class=b onclick="RF.from='2000-01-01';RF.to=today();pReports()">All</button></span></label></div></div>
  <div class=kp><div class=card>Net sale<div class=big>${inr(tot-rt)}</div><span class=mut>${ss.length} bills${rt?' · returns '+inr(rt):''}</span></div><div class=card>Profit<div class="big grn">${inr((tot-gst-cost)-(rt-rg-rc))}</div><span class=mut>after discount, free qty and returns</span></div><div class=card>Purchases<div class=big>${inr(pur)}</div><span class=mut>incl. GST</span></div><div class=card>Udhaar to collect<div class="big red">${inr(udh)}</div><span class=mut>supplier dues ${inr(sdue)}</span></div></div><br>
  <div class="card tw"><h3>GST summary</h3><table><tr><th>Output GST (on sales, less returns)</th><th>Input GST / ITC (on purchases, less returns)</th><th>Net GST payable</th></tr><tr><td>${inr(outg)}</td><td>${inr(itc)}</td><td><b class="${outg-itc>0?'red':'grn'}">${inr(outg-itc)}</b></td></tr></table><p class=mut>For guidance only; confirm with your CA before filing.</p><button class=b onclick="gstr1()">⬇ GSTR-1 files (B2CS, HSN, Documents) for this period</button></div>
  <div class=card><b>By payment:</b> ${Object.entries(pay).map(([k,v])=>`${k=='Credit'?'Credit (udhaar)':k}: ${inr(v)}`).join(' · ')||'<span class=mut>No sales in this period.</span>'}<br><b>By user:</b> ${Object.entries(byU).map(([k,v])=>`${esc(k)}: ${inr(v)}`).join(' · ')||'-'}</div>
@@ -520,22 +520,35 @@ function pReports(){const inR=x=>x.date>=RF.from&&x.date<=RF.to,ss=D.sales.filte
 
 // ---------- Doctor-wise referral report (which doctor's prescriptions came to the shop) ----------
 let RDX='';
+const drKey=n=>String(n||'').trim().replace(/^dr\.?\s*/i,'').replace(/\s+/g,' ').toLowerCase();
 function drRows(inR){const P={},key=n=>String(n||'').trim().replace(/^dr\.?\s*/i,'').replace(/\s+/g,' ').toLowerCase();
  const ret={};D.sreturns.filter(inR).forEach(r=>{if(r.saleId)ret[r.saleId]=(ret[r.saleId]||0)+r.amt});
  D.sales.filter(inR).forEach(s=>{const k=key(s.dr);if(!k)return;const p=P[k]||(P[k]={name:String(s.dr).trim(),bills:0,sale:0,ret:0,pts:{},meds:{},last:''});
   p.bills++;p.sale+=s.total;p.ret+=ret[s.id]||0;p.pts[(s.phone||'')+'|'+String(s.cust||'').trim().toLowerCase()]=1;if(s.date>p.last)p.last=s.date;
   const f=s.total/(s.lines.reduce((a,l)=>a+l.amt,0)||1);s.lines.forEach(l=>{const m=p.meds[l.name]||(p.meds[l.name]={name:l.name,strip:0,tab:0,amt:0,pack:packOf(item(l.itemId))});if(l.loose)m.tab+=Math.round(l.qty*m.pack);else m.strip+=l.qty;m.amt+=l.amt*f})});
- return Object.values(P).map(p=>{p.np=Object.keys(p.pts).length;p.net=p.sale-p.ret;return p}).sort((a,b)=>b.net-a.net)}
+ (D.settings.doctors||[]).forEach(d=>{const k=key(d.name);if(!k)return;const p=P[k]||(P[k]={name:d.name.trim(),bills:0,sale:0,ret:0,pts:{},meds:{},last:''});p.deg=d.deg||'';p.mine=1});
+ return Object.values(P).map(p=>{p.np=Object.keys(p.pts).length;p.net=p.sale-p.ret;return p}).sort((a,b)=>b.net-a.net||(b.mine||0)-(a.mine||0))}
 function drRep(inR){const rs=drRows(inR),nod=D.sales.filter(inR).filter(s=>!String(s.dr||'').trim()),nodT=nod.reduce((a,s)=>a+s.total,0);
  if(!rs.length&&!nod.length)return'';const sk=n=>esc(n).replace(/'/g,'');
- return`<div class="card tw"><h3>🩺 Doctor-wise (referred prescriptions)</h3><p class=mut>Bills where a doctor's name was typed on the bill (Alt+O). Same name with or without "Dr." is counted together.${L2('<br>কোন ডাক্তারের প্রেসক্রিপশন থেকে কত বিল হয়েছে।','<br>किस डॉक्टर की पर्ची से कितने बिल और कितनी बिक्री हुई।')}</p>
+ return`<div class="card tw"><h3>🩺 Doctor-wise (referred prescriptions)</h3><p class=mut>Bills where a doctor's name was typed on the bill (Alt+O). Same name with or without "Dr." is counted together. ● = shop doctor (Settings → Doctors). Pick any dates above: one day, a month, or All.${L2('<br>কোন ডাক্তারের প্রেসক্রিপশন থেকে কত বিল হয়েছে।','<br>किस डॉक्टर की पर्ची से कितने बिल और कितनी बिक्री हुई।')}</p>
  ${rs.length?`<table><tr><th>Doctor</th><th>Patients</th><th>${t('Bills')}</th><th>Sale</th><th>Returns</th><th>Net sale</th><th>Last bill</th><th></th></tr>
- ${rs.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${p.np}</td><td>${p.bills}</td><td>${inr(p.sale)}</td><td>${p.ret?inr(p.ret):'-'}</td><td><b>${inr(p.net)}</b></td><td>${fmtD(p.last)}</td><td><button class=b onclick="RDX=RDX=='${sk(p.name)}'?'':'${sk(p.name)}';pReports()">💊 Medicines</button></td></tr>
+ ${rs.map(p=>`<tr><td><b>${esc(p.name)}</b>${p.deg?'<br><span class=mut>'+esc(p.deg)+'</span>':''}${p.mine?' <span class=grn title="Shop doctor">●</span>':''}</td><td>${p.np}</td><td>${p.bills}</td><td>${inr(p.sale)}</td><td>${p.ret?inr(p.ret):'-'}</td><td><b>${inr(p.net)}</b></td><td>${p.last?fmtD(p.last):'-'}</td><td><button class=b onclick="RDX=RDX=='${sk(p.name)}'?'':'${sk(p.name)}';pReports()">💊 Medicines</button></td></tr>
  ${RDX==sk(p.name)?`<tr><td colspan=8 style="background:#f7f9fc"><b>${esc(p.name)} – medicines sold:</b><table>${Object.values(p.meds).sort((a,b)=>b.amt-a.amt).map(m=>`<tr><td>${esc(m.name)}</td><td>${[m.strip?r2(m.strip)+(m.pack>1?' strip':''):'',m.tab?m.tab+' tab':''].filter(Boolean).join(' + ')}</td><td>${inr(m.amt)}</td></tr>`).join('')}</table></td></tr>`:''}`).join('')}</table>`:'<p class=mut>No bill in this period has a doctor name.</p>'}
  ${nod.length?`<p class=mut>Without doctor name: ${nod.length} bills · ${inr(nodT)}</p>`:''}<button class=b onclick="drCSV()">⬇ CSV</button></div>`}
 function drCSV(){const inR=x=>x.date>=RF.from&&x.date<=RF.to,rs=drRows(inR),q=v=>'"'+String(v).replace(/"/g,'""')+'"';
  const csv=['Doctor,Patients,Bills,Sale,Returns,Net sale,Last bill'].concat(rs.map(p=>[q(p.name),p.np,p.bills,Math.round(p.sale),Math.round(p.ret),Math.round(p.net),p.last].join(','))).join('\n');
  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download='doctor-wise_'+RF.from+'_'+RF.to+'.csv';a.click()}
+
+// ---------- Shop doctors (owner keeps the list; shared to all counters; shown first on the bill and in the doctor report) ----------
+function docCard(){const L=D.settings.doctors||[];return`<div class=card><h3>🩺 Doctors</h3><p class=mut>Doctors who sit at the shop or send patients. They come first in the bill's Doctor box, and Reports → Doctor-wise shows each one's patients, bills and medicines for any dates.</p>
+ ${L.length?`<table><tr><th>Name</th><th>Degree</th><th>Reg. no.</th><th>Address / clinic</th><th>Phone</th><th></th></tr>${L.map(d=>`<tr style="${d.on===false?'opacity:.5':''}"><td><b>${esc(d.name)}</b></td><td>${esc(d.deg||'')}</td><td>${esc(d.reg||'')}</td><td>${esc(d.addr||'')}</td><td>${esc(d.ph||'')}</td><td><button class=b onclick="docEdit('${d.id}')">✏️</button> <button class=b onclick="docOn('${d.id}')">${d.on===false?'Show':'Hide'}</button></td></tr>`).join('')}</table>`:'<p class=mut>No doctors added yet.</p>'}
+ <div class=row><label>Doctor name<input id=dn placeholder="Dr. Sadikul Alam"></label><label>Degree<input id=dg placeholder="MBBS, MD (Chest)"></label><label>Reg. no.<input id=drg placeholder="WBMC 12345"></label><label>Address / clinic<input id=dad></label><label>Phone<input id=dph></label></div><input type=hidden id=did><button class=p onclick="docSave()">💾 Save doctor</button></div>`}
+function docSave(){if(!ME||ME.role!='owner')return alert('Only the Owner can change the doctor list.');const n=$('#dn').value.trim();if(!n)return alert('Type the doctor name.');const L=D.settings.doctors=(D.settings.doctors||[]).slice(),id=$('#did').value;
+ if(L.some(d=>d.id!=id&&drKey(d.name)==drKey(n)))return alert('This doctor is already in the list.');
+ const v={name:/^dr\b/i.test(n)?n:'Dr. '+n,deg:$('#dg').value.trim(),reg:$('#drg').value.trim(),addr:$('#dad').value.trim(),ph:$('#dph').value.replace(/\D/g,'').slice(-10)};
+ if(id){const d=L.find(x=>x.id==id);Object.assign(d,v)}else L.push({id:uid(),on:true,...v});save();pSettings()}
+function docEdit(id){const d=(D.settings.doctors||[]).find(x=>x.id==id);if(!d)return;$('#dn').value=d.name;$('#dg').value=d.deg||'';$('#drg').value=d.reg||'';$('#dad').value=d.addr||'';$('#dph').value=d.ph||'';$('#did').value=id;$('#dn').focus()}
+function docOn(id){if(!ME||ME.role!='owner')return alert('Only the Owner can change the doctor list.');const d=(D.settings.doctors||[]).find(x=>x.id==id);if(!d)return;d.on=d.on===false;D.settings.doctors=D.settings.doctors.slice();save();pSettings()}
 
 // ---------- Counter / staff cash (who billed what, cash handed over, cash still to come) ----------
 let RCX='';
@@ -652,7 +665,7 @@ function sPay(n){const x=supDues().find(y=>y.name==n);const a=Math.round((+promp
 // Every bill / purchase / return / payment is uploaded once as a row that is never edited (append-only).
 // Stock is rebuilt from opening stock + all those rows, so two counters can never overwrite each other.
 const KINDS={opening:'openings',sale:'sales',purchase:'purchases',sreturn:'sreturns',preturn:'preturns',cpay:'cpays',spay:'spays',cash:'cashes'};
-const SHARED=['shop','addr','phone','gstin','dl','terms','paper'];
+const SHARED=['shop','addr','phone','gstin','dl','terms','paper','doctors'];
 const CAN={owner:k=>true,manager:k=>k!='opening',staff:k=>k=='sale'||k=='cpay'};
 var CL=DEMO?null:JSON.parse(localStorage.asmaCloud||'null'),SY={busy:false,last:'',err:'',t:0,again:false};
 const clSave=()=>{if(!DEMO)localStorage.asmaCloud=JSON.stringify(CL)};
@@ -766,6 +779,7 @@ setInterval(()=>{if(CL&&CL.shop)sync()},30000);if(globalThis.addEventListener)ad
 // ---------- Settings ----------
 function pSettings(){const s=D.settings;
  $('#main').innerHTML=`<div class=card><h3>⚙️ ${t('Settings')}</h3><div class=row>${[['shop','Shop name'],['addr','Address'],['phone','Phone'],['gstin','GSTIN'],['dl','Drug licence no.'],['terms','Bill footer note'],['device','This computer name (Counter 1, Counter 2…)']].map(([k,n])=>`<label>${n}<input id=s_${k} value="${esc(s[k])}"></label>`).join('')}</div><br><button class=p onclick="stSave()">💾 Save</button></div>
+ ${docCard()}
  <div class=card><h3>🖨 Bill print</h3><div class=row><label>Paper size<select onchange="setPaper(this.value)">${[['a4x2','A4 – 2 copies (customer + shop), cut in half'],['a5','A5 paper (half page)'],['a4','A4 full page (long bills)'],['t80','80 mm thermal roll']].map(([v,n])=>`<option value=${v} ${(D.settings.paper||'a5')==v?'selected':''}>${n}</option>`).join('')}</select></label><label>&nbsp;<button class=b onclick="reprint()">🖨 Test print last bill</button></label></div></div>
  <div class=card><h3>👥 Users (multi-login)</h3><p class=mut>Owner: everything · Manager: everything except Settings · Staff: Search, Bill, Expiry only. Every bill saves who made it.</p>
  <table><tr><th>${t('Name')}</th><th>${t('Role')}</th><th>${t('PIN')}</th><th></th></tr>${D.users.map(u=>`<tr><td>${esc(u.name)}</td><td>${u.role}</td><td>••••</td><td><button class=b onclick="uPin('${u.id}')">Change PIN</button> ${u.id!=ME.id?`<button class=x onclick="uDel('${u.id}')">✕</button>`:''}</td></tr>`).join('')}</table><br>
