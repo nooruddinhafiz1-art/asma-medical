@@ -1,4 +1,4 @@
-const VER='0.9.30';
+const VER='0.9.31';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -713,9 +713,12 @@ function syncPill(){if(!CL||!CL.shop)return'';const p=pending();return`<span cla
 function tfetch(u,o={},ms=30000){if(typeof AbortController=='undefined')return fetch(u,o);const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,signal:c.signal}).catch(e=>{throw new Error(e&&e.name=='AbortError'?'Internet slow: server did not answer in '+Math.round(ms/1000)+' s. Check net and try again.':(e&&e.message)||'Network error')}).finally(()=>clearTimeout(t))}
 async function clAuth(body,grant){const r=await tfetch(CL.url+'/auth/v1/token?grant_type='+grant,{method:'POST',headers:{apikey:CL.key,'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));
  if(!r.ok)throw new Error(j.error_description||j.msg||j.message||'Sign-in failed');CL.at=j.access_token;CL.rt=j.refresh_token;CL.exp=Date.now()+((j.expires_in||3600)-60)*1000;CL.uid=j.user.id;CL.email=j.user.email;clSave()}
-async function api(path,opt={}){if(!CL.at||Date.now()>CL.exp)await clAuth({refresh_token:CL.rt},'refresh_token');
+async function api(path,opt={},_re){if(!CL.at||Date.now()>CL.exp)await clAuth({refresh_token:CL.rt},'refresh_token');
  const r=await tfetch(CL.url+path,{...opt,headers:{apikey:CL.key,Authorization:'Bearer '+CL.at,'Content-Type':'application/json',...(opt.headers||{})}});const tx=await r.text();let j=null;try{j=tx?JSON.parse(tx):null}catch(e){}
- if(!r.ok)throw new Error((j&&(j.message||j.msg||j.error_description||j.error))||('HTTP '+r.status));return j}
+ if(!r.ok){const m=(j&&(j.message||j.msg||j.error_description||j.error))||('HTTP '+r.status);
+  // phone clock wrong or app asleep: the server says the sign-in token ran out -> get a new one and try once more
+  if(!_re&&(r.status==401||/jwt|token/i.test(m))&&CL.rt){try{await clAuth({refresh_token:CL.rt},'refresh_token')}catch(e){throw new Error('Cloud sign-in ran out ('+e.message+'). Sync page: Disconnect, then Sign in again.')}return api(path,opt,1)}
+  throw new Error(m)}return j}
 const rpc=(f,b)=>api('/rest/v1/rpc/'+f,{method:'POST',body:JSON.stringify(b)});
 const sharedOf=()=>{const o={};SHARED.forEach(k=>o[k]=D.settings[k]??null);return JSON.stringify({s:o})};
 const usersOf=()=>JSON.stringify({u:D.users.map(u=>({...u})).sort((a,b)=>a.id<b.id?-1:1),r:D.settings.recH||null});
