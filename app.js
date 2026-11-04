@@ -1,4 +1,4 @@
-const VER='0.9.28';
+const VER='0.9.29';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -709,10 +709,11 @@ const clSave=()=>{if(!DEMO)localStorage.asmaCloud=JSON.stringify(CL)};
 const strip=o=>{const c={...o};delete c._s;delete c._d;return c};
 const pending=()=>Object.values(KINDS).reduce((a,k)=>a+(D[k]||[]).filter(x=>!x._s).length,0)+(CL&&CL.role!='staff'?D.items.filter(i=>i._d).length:0);
 function syncPill(){if(!CL||!CL.shop)return'';const p=pending();return`<span class=pill style="background:${SY.err?'#fde8e8':p?'#fff8e1':'#e7f6ec'};color:#333" title="${esc(SY.err)}">☁ ${SY.err?(SY.err=='offline'?'offline':'sync problem'):p?p+' to upload':'synced '+SY.last}</span>`}
-async function clAuth(body,grant){const r=await fetch(CL.url+'/auth/v1/token?grant_type='+grant,{method:'POST',headers:{apikey:CL.key,'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));
+function tfetch(u,o={},ms=30000){if(typeof AbortController=='undefined')return fetch(u,o);const c=new AbortController(),t=setTimeout(()=>c.abort(),ms);return fetch(u,{...o,signal:c.signal}).catch(e=>{throw new Error(e&&e.name=='AbortError'?'Internet slow: server did not answer in '+Math.round(ms/1000)+' s. Check net and try again.':(e&&e.message)||'Network error')}).finally(()=>clearTimeout(t))}
+async function clAuth(body,grant){const r=await tfetch(CL.url+'/auth/v1/token?grant_type='+grant,{method:'POST',headers:{apikey:CL.key,'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));
  if(!r.ok)throw new Error(j.error_description||j.msg||j.message||'Sign-in failed');CL.at=j.access_token;CL.rt=j.refresh_token;CL.exp=Date.now()+((j.expires_in||3600)-60)*1000;CL.uid=j.user.id;CL.email=j.user.email;clSave()}
 async function api(path,opt={}){if(!CL.at||Date.now()>CL.exp)await clAuth({refresh_token:CL.rt},'refresh_token');
- const r=await fetch(CL.url+path,{...opt,headers:{apikey:CL.key,Authorization:'Bearer '+CL.at,'Content-Type':'application/json',...(opt.headers||{})}});const tx=await r.text();let j=null;try{j=tx?JSON.parse(tx):null}catch(e){}
+ const r=await tfetch(CL.url+path,{...opt,headers:{apikey:CL.key,Authorization:'Bearer '+CL.at,'Content-Type':'application/json',...(opt.headers||{})}});const tx=await r.text();let j=null;try{j=tx?JSON.parse(tx):null}catch(e){}
  if(!r.ok)throw new Error((j&&(j.message||j.msg||j.error_description||j.error))||('HTTP '+r.status));return j}
 const rpc=(f,b)=>api('/rest/v1/rpc/'+f,{method:'POST',body:JSON.stringify(b)});
 const sharedOf=()=>{const o={};SHARED.forEach(k=>o[k]=D.settings[k]??null);return JSON.stringify({s:o})};
@@ -802,11 +803,19 @@ async function clCreate(){const ser=clSer();if(!ser)return;if(!confirm('Upload a
  try{const id=await rpc('create_shop',{p_name:D.settings.shop});if(!await clClaim(id,ser))return;CL.shop=id;CL.role='owner';CL.shopName=D.settings.shop;CL.cur=0;CL.icur='';CL.setH='';CL.usH='';CL.uids=[];
   D.settings.series=ser;D.openings=[{id:'open-'+uid(),date:today(),device:D.settings.device,batches:D.batches.filter(b=>b.qty).map(b=>({itemId:b.itemId,batch:b.batch,exp:b.exp,qty:b.qty,ptr:b.ptr,cost:b.cost??b.ptr,mrp:b.mrp}))}];
   ['sales','purchases','sreturns','preturns','cpays','spays'].forEach(k=>D[k].forEach(x=>{x.hist=1;delete x._s}));D.items.forEach(i=>i._d=1);clSave();save(1);await sync();alert(SY.err?'Shop created, but some data did not upload yet: '+SY.err:'Shop created in the cloud.');pCloud()}catch(e){alert(e.message)}}
-async function clJoin(id,role,name){const ser=clSer();if(!ser)return;if(!await clClaim(id,ser))return;if(!confirm('Replace ALL local data on this computer with the cloud data of "'+name+'"?'))return;bk();
- const keep={device:D.settings.device,series:ser,dbId:D.settings.dbId,billNo:1,packV:D.settings.packV,lastBackup:D.settings.lastBackup};
- D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.settings={...D.settings,...keep};
- CL.shop=id;CL.role=role;CL.shopName=name;CL.cur=0;CL.icur='';CL.setH=sharedOf();CL.usH='';CL.uids=[];CL.pull=1;clSave();save(1);await sync();
- alert(SY.err?'Joined, but: '+SY.err:'Joined. Log in with your PIN.');logout()}
+async function clJoin(id,role,name){if(SY.joining)return;const ser=clSer();if(!ser)return;
+ const has=D.items.length||Object.values(KINDS).some(k=>(D[k]||[]).length);
+ if(has&&!confirm('Replace ALL local data on this computer with the cloud data of "'+name+'"?'))return;
+ const st=m=>{const e=$('#c_sh');if(e)e.innerHTML='<p><b>⏳ '+esc(m)+'</b><br><span class=mut>Do not close this page.</span></p>'};
+ SY.joining=1;try{st('Reserving counter '+ser+'…');if(!await clClaim(id,ser))return;
+  if(has){try{bk(1)}catch(e){}}
+  const keep={device:D.settings.device,series:ser,dbId:D.settings.dbId,billNo:1,packV:D.settings.packV,lastBackup:D.settings.lastBackup};
+  D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.settings={...D.settings,...keep};
+  CL.shop=id;CL.role=role;CL.shopName=name;CL.cur=0;CL.icur='';CL.ep=null;CL.setH=sharedOf();CL.usH='';CL.uids=[];CL.pull=1;clSave();save(1);
+  st('Downloading shop data (medicines, stock, bills, PINs)…');SY.busy=false;SY.last='';SY.err='';await sync();
+  if(!SY.last){alert('Join did not finish: '+SY.err+'\nCheck the internet and press Join again.');CL.shop=null;clSave();pCloud();return}
+  alert(SY.err?'Joined, but: '+SY.err:'Joined "'+name+'" as counter '+ser+'. '+D.items.length+' medicines downloaded. Log in with your PIN.');logout()}
+ catch(e){alert('Join failed: '+e.message);if(CL&&CL.pull){CL.shop=null;clSave()}pCloud()}finally{SY.joining=0}}
 async function clOut(q){if(!q){if(!confirm('Disconnect this computer from the cloud? Local data stays.'))return;if(!(ME&&ME.role=='owner'&&CL.role=='owner')){const pw=prompt('Password of the cloud login '+CL.email+':');if(!pw)return;try{await clAuth({email:CL.email,password:pw},'password')}catch(e){return alert('Wrong password')}}}CL=null;localStorage.removeItem('asmaCloud');whoUI();pCloud()}
 async function clMembers(){try{const ms=await api(`/rest/v1/members?select=email,role&shop_id=eq.${CL.shop}&order=created_at`);$('#c_mem').innerHTML=`<table><tr><th>Email</th><th>Role</th><th></th></tr>${ms.map(m=>`<tr><td>${esc(m.email||'')}</td><td>${m.role}</td><td>${m.email&&m.email!=CL.email?`<button class=x onclick="clRemove('${esc(m.email)}')">Remove</button>`:''}</td></tr>`).join('')}</table>`}catch(e){$('#c_mem').innerHTML='<span class=red>'+esc(e.message)+'</span>'}}
 async function clAdd(){const em=$('#m_em').value.trim(),pw=$('#m_pw').value;if(!em)return alert('Enter email');if(pw&&pw.length<8)return alert('Password must be at least 8 characters');try{await rpc('create_login',{p_shop:CL.shop,p_email:em,p_password:pw||null,p_role:$('#m_ro').value});alert('Login ready: '+em+(pw?'\nPassword: '+pw:'')+'\nOn the counter computer: Sync → Sign in.');$('#m_em').value='';$('#m_pw').value='';clMembers()}catch(e){alert(e.message)}}
@@ -851,7 +860,7 @@ function gstr1(){const g=gstr1Data(RF.from,RF.to),tag=RF.from+'_to_'+RF.to;
  if(g.cdn.length)setTimeout(()=>dl('cdnr_'+tag+'.csv',csv([['GSTIN/UIN of Recipient','Receiver Name','Note Number','Note Date','Note Type','Place Of Supply','Reverse Charge','Note Supply Type','Note Value','Applicable % of Tax Rate','Rate','Taxable Value','Cess Amount'],...g.cdn])),1600);
  setTimeout(()=>dl('docs_'+tag+'.csv',csv([['Nature of Document','Sr. No. From','Sr. No. To','Total Number','Cancelled'],...g.docs])),800);
  alert((3+(g.b2b.length?1:0)+(g.cdn.length?1:0))+' files downloaded for GSTR-1: B2CS (customers without GSTIN), HSN, Documents'+(g.b2b.length?', B2B (GSTIN bills)':'')+(g.cdn.length?', CDNR (returns on GSTIN bills)':'')+'. Returns on normal bills are already subtracted. Give them to your CA or import in the GST offline tool.')}
-function bk(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));a.download='asma-backup-'+today()+'.json';a.click();D.settings.lastBackup=today();save();go(cur)}
+function bk(noGo){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));a.download='asma-backup-'+today()+'.json';a.click();D.settings.lastBackup=today();if(noGo)return;save();go(cur)}
 function rs(f){if(!f)return;f.text().then(x=>{const d=JSON.parse(x);if(!d.items)return alert('Not a valid backup');if(CL&&CL.shop)return alert('This computer is connected to the cloud. Disconnect it on the Sync page first.');if(!confirm('Replace all data with this backup?'))return;D=d;persist().then(()=>location.reload())})}
 
 const FLIST=[["🧾","Fast billing","Keyboard-only bills, F2 search, print A4 / A5 / 80mm"],["📷","Barcode scan","Scanner or phone camera, GS1 DataMatrix"],["💊","Smart medicine search","Name, salt, rack; same-salt substitute when out of stock"],["📦","Stock & batches","Batch, expiry, rack, strip + loose tablets"],["⏰","Expiry alerts","See medicines expiring soon, return in time"],["🛒","Purchase & supplier import","Import supplier bill from Excel / CSV"],["📒","Udhaar (credit)","Customer dues and supplier payments"],["📊","GST reports","GSTR-1 B2B, B2CS, HSN, CDNR export"],["☁️","Cloud sync","All counters share one live stock, works offline too"],["🔐","Safe roles","Owner / Manager / Staff PINs, bills cannot be edited"],["🌐","3 languages","English, বাংলা, हिंदी"],["💾","Backup","One-click backup file, keep in Drive / pen drive"]];
