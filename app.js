@@ -1,4 +1,4 @@
-const VER='0.9.31';
+const VER='0.9.32';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -980,16 +980,24 @@ function impAdd(){let n=0,skip=0,made=0;IMP.list.forEach(r=>{if(!r.batch||!r.exp
 
 // ---------- Start real shop + opening stock import ----------
 function wipeBiz(){D.items=[];D.batches=[];Object.values(KINDS).forEach(k=>D[k]=[]);D.rejected=[];D.settings.billNo=1;D.settings.realShop=today()}
+function pwAsk(title){return new Promise(res=>{const d=document.createElement('div');d.id='pwov';d.setAttribute('style','position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px');
+ d.innerHTML=`<div style="background:#fff;border-radius:12px;padding:16px;max-width:360px;width:100%"><h3 style="margin:0 0 8px">🔒 ${esc(title)}</h3><p class=mut style="margin:0 0 8px">Type the Admin cloud password (the one used to Sign in on the Sync page${CL&&CL.email?' for '+esc(CL.email):''}).</p><input id=pwin type=password autocomplete=off style="width:100%;box-sizing:border-box;font-size:18px;padding:8px"><div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end"><button class=b id=pwno>Cancel</button><button class=p id=pwok>OK</button></div></div>`;
+ document.body.appendChild(d);const inp=d.querySelector('#pwin'),end=v=>{d.remove();res(v)};d.querySelector('#pwno').onclick=()=>end(null);d.querySelector('#pwok').onclick=()=>end(inp.value);inp.onkeydown=e=>{if(e.key=='Enter')end(inp.value);if(e.key=='Escape')end(null)};setTimeout(()=>inp.focus(),50)})}
+async function adminPwOk(title){const pw=await pwAsk(title);if(pw==null||pw==='')return false;if(globalThis.navigator&&navigator.onLine===false){alert('Internet is needed to check the Admin password.');return false}
+ try{const r=await tfetch(CL.url+'/auth/v1/token?grant_type=password',{method:'POST',headers:{apikey:CL.key,'Content-Type':'application/json'},body:JSON.stringify({email:CL.email,password:pw})});const j=await r.json().catch(()=>({}));
+  if(!r.ok||!j.user||j.user.id!=CL.uid){alert('Wrong Admin password. Nothing was deleted.');return false}return true}catch(e){alert('Could not check the password: '+e.message+'\nNothing was deleted.');return false}}
 async function freshStart(){if(DEMO)return alert('This is the demo shop. Use Reload demo data to start the demo again.');if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');const on=CL&&CL.shop;if(on&&CL.role!='owner')return alert('Only the cloud owner login can do this.');
  const cd=custDues().filter(c=>c.bal>0).reduce((a,c)=>a+c.bal,0),sdu=supDues().filter(x=>x.bal>0).reduce((a,x)=>a+x.bal,0);
  if(prompt('FRESH START'+(on?' on ALL counters and the cloud':'')+':\n\nDELETES all bills, purchases, sale/supplier returns, udhaar and supplier payments, and the H1 register (keep the backup file: the H1 register must be kept 3 years). Bill numbers start again from 1.\nKEEPS all medicines (rack, price, barcode) and today\'s stock, saved as new opening stock.\n'+(cd||sdu?'\n⚠ Pending udhaar '+inr(cd)+' and supplier dues '+inr(sdu)+' will be cleared. Print or note the Dues page first.\n':'')+'\nA backup file downloads first. Type FRESH to continue:')!=='FRESH')return;
  if(on&&globalThis.navigator&&navigator.onLine===false)return alert('Internet is needed for a cloud fresh start.');
+ if(on&&!(await adminPwOk('Fresh start: Admin password')))return;
  const items=D.items.map(i=>({...i})),keep=D.batches.filter(b=>b.qty>1e-9).map(b=>({itemId:b.itemId,batch:b.batch,exp:b.exp,qty:r2(b.qty),ptr:b.ptr,cost:b.cost??b.ptr,mrp:b.mrp}));
  bk();if(on){try{const e=await rpc('reset_shop',{p_shop:CL.shop});wipeBiz();CL.ep=e;CL.cur=0;CL.icur='';clSave()}catch(e){return alert('Fresh start failed: '+e.message)}}else wipeBiz();
  D.items=items.map(i=>{delete i._s;i._d=1;return i});if(keep.length)D.openings.push({id:'open-'+uid(),date:today(),device:D.settings.device,by:ME.name,fresh:1,batches:keep});D.batches=keep.map(b=>({id:uid(),...b}));
  save(1);if(on)sync();alert('Done. '+D.items.length+' medicines and '+keep.length+' stock batches kept. Bills start again from 1.');go('stock')}
 async function fullReset(){if(DEMO)return alert('This is the demo shop. Use Reload demo data to start the demo again.');if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');const on=CL&&CL.shop;if(on&&CL.role!='owner')return alert('Only the cloud owner login can reset the shop.');
  if(prompt('FULL RESET'+(on?' of the shop on ALL counters and the cloud':'')+':\nremoves ALL medicines, stock, bills, purchases, returns and udhaar. Users, PINs, logins and shop details stay. A backup file downloads first.\n\nType RESET to continue:')!=='RESET')return;
+ if(on){if(globalThis.navigator&&navigator.onLine===false)return alert('Internet is needed for a cloud reset.');if(!(await adminPwOk('Full reset: Admin password')))return}
  bk();if(on){if(globalThis.navigator&&navigator.onLine===false)return alert('Internet is needed for a cloud reset.');try{const e=await rpc('reset_shop',{p_shop:CL.shop});wipeBiz();CL.ep=e;CL.cur=0;CL.icur='';clSave()}catch(e){return alert('Reset failed: '+e.message)}}else wipeBiz();
  save(1);if(on)sync();alert('Done. The shop is empty. Add medicines from Stock → Import stock list, Purchase, or Stock → New medicine.');go('stock')}
 function startReal(){if(DEMO)return alert('This is the demo shop. To start a real shop open the main software link.');if(!ME||ME.role!='owner')return alert('Only the Owner can do this.');if(CL&&CL.shop)return alert('Demo is already removed. To empty a connected shop use 🧹 Full reset.');
