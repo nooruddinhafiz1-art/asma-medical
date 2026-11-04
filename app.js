@@ -1,4 +1,4 @@
-const VER='0.9.22';
+const VER='0.9.23';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -271,7 +271,10 @@ async function migratePins(){let ch=0;for(const u of D.users)if(u.pin){u.pinH=aw
 const ACL={owner:['search','bill','purchase','stock','expiry','order','returns','dues','reports','h1','cloud','settings','help'],manager:['search','bill','purchase','stock','expiry','order','returns','dues','reports','h1','cloud','help'],staff:['search','bill','expiry','cloud','help']};
 const RK={staff:1,manager:2,owner:3};
 function eRole(){if(!ME)return'staff';const r=ME.role;return(CL&&CL.shop&&CL.role&&RK[CL.role]<RK[r])?CL.role:r}
-let ME=D.users.find(u=>u.id==sessionStorage[UK])||null;
+const SSK=SK+'Sess',SS_MS=12*3600e3;
+function sessGet(){try{const j=JSON.parse(localStorage[SSK]||'null');if(j&&Date.now()-j.t<SS_MS)return j.id}catch(e){}return null}
+function sessSet(id){try{if(id)localStorage[SSK]=JSON.stringify({id,t:Date.now()});else localStorage.removeItem(SSK)}catch(e){}}
+let ME=D.users.find(u=>u.id==(sessionStorage[UK]||sessGet()))||null;if(ME){sessionStorage[UK]=ME.id;sessSet(ME.id)}
 if(ME)setTimeout(autoBk,1500);
 function pLogin(){if(!D.users.some(u=>u.pinH))return pSetup();$('#nav').innerHTML='';$('#who').innerHTML='';
  $('#main').innerHTML=LWRAP(`<div class=card style="text-align:center;margin:0"><img src="logo.png" style="height:90px"><h3>${t('Login')}</h3>
@@ -287,11 +290,11 @@ async function makeRec(){const k=recKey();D.settings.recH=await hashPin({id:'rec
 async function forgotPin(){if(!D.settings.recH){if(confirm('No recovery key on this device.\n\nOK = login with Owner email + password (cloud). Your real PIN and data will come from the cloud.'))pJoin();return}const k=(prompt('Enter Owner recovery key (XXXX-XXXX-XXXX)')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/(.{4})(?=.)/g,'$1-');
  if(!await checkPin({id:'recovery'},k,D.settings.recH))return alert('Wrong recovery key');const a=prompt('New Owner PIN (4–6 digits)');if(!/^\d{4,6}$/.test(a||''))return alert('4–6 digits only');if(prompt('Repeat new PIN')!==a)return alert('PINs do not match');
  const o=D.users.find(u=>u.role=='owner');o.pinH=await hashPin(o,a);save();await makeRec();alert('Owner PIN changed. A new recovery key was made; the old one no longer works.');pLogin()}
-async function doSetup(){const a=$('#s1').value,b=$('#s2').value;if(!/^\d{4,6}$/.test(a))return alert('4–6 digits only');if(a!==b)return alert('PINs do not match');const o=D.users.find(u=>u.role=='owner')||D.users[0];o.pinH=await hashPin(o,a);save();await makeRec();ME=o;sessionStorage[UK]=o.id;whoUI();go(ACL[o.role][0])}
+async function doSetup(){const a=$('#s1').value,b=$('#s2').value;if(!/^\d{4,6}$/.test(a))return alert('4–6 digits only');if(a!==b)return alert('PINs do not match');const o=D.users.find(u=>u.role=='owner')||D.users[0];o.pinH=await hashPin(o,a);save();await makeRec();ME=o;sessionStorage[UK]=o.id;sessSet(o.id);whoUI();go(ACL[o.role][0])}
 async function doLogin(){const u=D.users.find(x=>x.id==$('#lu').value);const pin=$('#lp').value;if(!u||!u.pinH||!await checkPin(u,pin,u.pinH))return alert('Wrong PIN');
  if(!String(u.pinH).startsWith('pbk1$')&&!(CL&&CL.shop&&CL.role!='owner')){const nh=await hashPin(u,pin);if(nh.startsWith('pbk1$')){u.pinH=nh;save()}}
- ME=u;sessionStorage[UK]=u.id;whoUI();go(ACL[eRole()][0]);if(!DEMO&&u.role!='staff'&&pin.length<6)setTimeout(()=>alert('Tip: your '+u.role+' PIN has only '+pin.length+' digits. Use a 6-digit PIN (Settings → change PIN) - it is much harder to guess.'),300);if(u.role=='owner'&&!D.settings.recH){alert('Important: make an Owner recovery key now. It is the only way to reset the Owner PIN if it is forgotten.');await makeRec()}setTimeout(autoBk,1500)}
-function logout(){ME=null;sessionStorage.removeItem(UK);pLogin()}
+ ME=u;sessionStorage[UK]=u.id;sessSet(u.id);whoUI();go(ACL[eRole()][0]);if(!DEMO&&u.role!='staff'&&pin.length<6)setTimeout(()=>alert('Tip: your '+u.role+' PIN has only '+pin.length+' digits. Use a 6-digit PIN (Settings → change PIN) - it is much harder to guess.'),300);if(u.role=='owner'&&!D.settings.recH){alert('Important: make an Owner recovery key now. It is the only way to reset the Owner PIN if it is forgotten.');await makeRec()}setTimeout(autoBk,1500)}
+function logout(){ME=null;sessionStorage.removeItem(UK);sessSet(null);pLogin()}
 function whoUI(){$('#who').innerHTML=(DS.err=='full'?`<span class=pill style="background:#d32f2f;color:#fff">⚠ NOT SAVED - storage full</span> `:'')+(ME?`<span class=pill style="background:#fff3e0;color:#b45f06">👤 ${esc(ME.name)} · ${eRole()}${eRole()!=ME.role?' (cloud limit)':''}</span> <button class=b style="padding:6px 10px" onclick="logout()">Logout</button> ${syncPill()}`:'')}
 
 // ---------- helpers ----------
@@ -334,7 +337,7 @@ function find(q){q=q.trim().toLowerCase();if(!q)return[];const b=byBc(q);if(b)re
 const P=[['search','🔍','Search'],['bill','🧾','New Bill'],['purchase','📦','Purchase'],['stock','💊','Stock'],['expiry','⏰','Expiry'],['order','📝','Order List'],['returns','↩️','Returns'],['dues','💰','Dues'],['reports','📈','Reports'],['h1','℞','H1 Register'],['cloud','☁️','Sync'],['settings','⚙️','Settings'],['help','❓','Help']];
 let cur='search';
 function nav(){if(!ME)return;$('#nav').innerHTML=P.filter(p=>ACL[eRole()].includes(p[0])).map(p=>`<button class="${p[0]==cur?'a':''}" onclick="go('${p[0]}')">${p[1]} ${t(p[2])}</button>`).join('')}
-function go(p){if(!ME)return pLogin();if(!ACL[eRole()].includes(p))p=ACL[eRole()][0];cur=p;nav();({search:pSearch,bill:pBill,purchase:pPurchase,stock:pStock,expiry:pExpiry,order:pOrder,reports:pReports,settings:pSettings,help:pHelp,returns:pReturns,dues:pDues,cloud:pCloud,h1:pH1})[p]();window.scrollTo(0,0)}
+function go(p){if(SY.kick&&!['bill','purchase'].includes(p)){SY.kick=0;ME=null;sessionStorage.removeItem(UK);sessSet(null)}if(!ME)return pLogin();if(ME)sessSet(ME.id);if(!ACL[eRole()].includes(p))p=ACL[eRole()][0];cur=p;nav();({search:pSearch,bill:pBill,purchase:pPurchase,stock:pStock,expiry:pExpiry,order:pOrder,reports:pReports,settings:pSettings,help:pHelp,returns:pReturns,dues:pDues,cloud:pCloud,h1:pH1})[p]();window.scrollTo(0,0)}
 function netUI(){const o=navigator.onLine;$('#net').className='pill '+(o?'on':'off');$('#net').textContent=o?'● Online':'● Offline – saved on this computer';$('#dev').textContent='🖥 '+D.settings.device}
 addEventListener('online',netUI);addEventListener('offline',netUI);
 
@@ -363,6 +366,8 @@ function sRes(){const q=$('#q').value,r=find(q),canAdd=ME&&ME.role!='staff';if(!
 
 // ---------- Bill ----------
 let B={lines:[],cust:'',phone:'',disc:0,pay:'Cash'};
+const DRK=SK+'Draft';function drLoad(){try{const j=JSON.parse(localStorage[DRK]||'null');if(!j)return;const ok=x=>x&&Array.isArray(x.lines)&&x.lines.every(l=>l&&item(l.itemId));if(ok(j.B))B=j.B;if(j.PU&&Array.isArray(j.PU.lines))PU=j.PU}catch(e){}}
+let DRL='';setInterval(()=>{try{const v=JSON.stringify({B,PU});if(v!==DRL){DRL=v;localStorage[DRK]=v}}catch(e){}},2000);
 function billAdd(id){go('bill');addLine(id)}
 function pBill(){
  $('#main').innerHTML=`<div class=card><h3>🧾 ${t('New Bill')} <span class=mut>No. ${(D.settings.series?D.settings.series+'-':'')+D.settings.billNo} · ${today()}</span></h3>${B.edOf?`<p class=red><b>✏️ Editing bill ${esc(B.edOf)}</b> – old bill is cancelled. Correct and save this new bill.</p>`:''}
@@ -751,12 +756,12 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
    for(const id of (CL.uids||[]).filter(id=>!D.users.some(u=>u.id==id)))await api(`/rest/v1/shop_users?shop_id=eq.${sh}&id=eq.${encodeURIComponent(id)}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
    CL.usH=lu;CL.uids=D.users.map(u=>u.id)}
   else{const ur=await api(`/rest/v1/shop_users?select=id,role,data&shop_id=eq.${sh}`);const us=ur.filter(x=>x.id!='__rec').map(x=>x.data),rc=ur.find(x=>x.id=='__rec');
-   if(us.length){const before=usersOf();D.users=us;D.settings.recH=rc?rc.data.recH:null;if(usersOf()!==before){changed=true;if(ME&&!D.users.some(u=>u.id==ME.id&&u.pinH==ME.pinH)){ME=null;sessionStorage.removeItem(UK)}else if(ME)ME=D.users.find(u=>u.id==ME.id)}CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}}
+   if(us.length){const before=usersOf();D.users=us;D.settings.recH=rc?rc.data.recH:null;if(usersOf()!==before){changed=true;if(ME&&!D.users.some(u=>u.id==ME.id&&u.pinH==ME.pinH)){if(['bill','purchase'].includes(cur)&&((B.lines||[]).length||(PU.lines||[]).length))SY.kick=1;else{ME=null;sessionStorage.removeItem(UK);sessSet(null)}}else if(ME)ME=D.users.find(u=>u.id==ME.id)}CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}}
   if(CL.pull){delete CL.pull;CL.setH=sharedOf();CL.usH=usersOf();CL.uids=D.users.map(u=>u.id)}
   clSave();
   if(changed){rebuild();if(D.settings.series){const mx=Math.max(0,...D.sales.filter(x=>(x.ser||'')==D.settings.series).map(x=>+x.no||0));if(mx>=D.settings.billNo)D.settings.billNo=mx+1}}
   SY.err=errs.join(' · ');SY.last=new Date().toTimeString().slice(0,5);save(1);
-  if(changed){if(!ME)pLogin();else if(['stock','expiry','order','reports','dues','returns','search','h1'].includes(cur))go(cur)}
+  if(changed){if(!ME)pLogin();else if(['stock','expiry','order','reports','dues','returns','search','h1'].includes(cur)&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))go(cur)}
  }catch(e){SY.err=e.message;save(1)}finally{SY.busy=false;whoUI();if(cur=='cloud'&&$('#clst'))$('#clst').innerHTML=clStatus();if(SY.again){SY.again=false;syncSoon()}}}
 function clStatus(){if(!CL||!CL.at)return'<span class=mut>Not connected</span>';return`Signed in as <b>${esc(CL.email)}</b>${CL.shop?` · shop <b>${esc(CL.shopName||'')}</b> · cloud role <b>${CL.role}</b> · counter <b>${esc(D.settings.series||'-')}</b><br>Last sync: ${SY.last||'-'} · waiting to upload: ${pending()}${(D.rejected||[]).length?` · <span class=red>not allowed, kept aside: ${D.rejected.length}</span>`:''}${SY.err?`<br><span class=red>⚠ ${esc(SY.err)}</span>`:''}`:''}`}
 const CLOUD_DEF={url:'https://oiowfuqtmygebcojnfty.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pb3dmdXF0bXlnZWJjb2puZnR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjU5OTQsImV4cCI6MjEwODcwMTk5NH0.TXMhqJGfvGog-Z78_js6ZwtlDzgPV_hfw_WWnh_bK3U'};
@@ -876,7 +881,7 @@ addEventListener('keydown',e=>{if(!ME)return;
 if(DEMO){const T=document.querySelector('header .t');if(T)T.innerHTML='<b>DEMO MEDICAL STORE</b><small>Sample data · Software by UltraAccounting</small>';document.title='DEMO · Pharmacy Software · UltraAccounting';const n=document.getElementById('net');if(n)n.insertAdjacentHTML('beforebegin','<span class=pill style="background:#c62828;color:#fff">DEMO</span>')}
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js?v='+VER);
 if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();
-$('#lng').value=L;netUI();whoUI();migratePins().then(()=>ME?go(ACL[eRole()][0]):pLogin());
+drLoad();$('#lng').value=L;netUI();whoUI();migratePins().then(()=>ME?go((B.lines.length&&ACL[eRole()].includes('bill'))?'bill':(PU.lines.length&&ACL[eRole()].includes('purchase'))?'purchase':ACL[eRole()][0]):pLogin());
 
 // ---------- Barcode: camera scan (phone) + GS1 ----------
 function gs1(v){v=String(v||'').replace(/^\]d2|^\]C1|^\]Q3/,'');const o={};
