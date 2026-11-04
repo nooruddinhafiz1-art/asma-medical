@@ -1,4 +1,4 @@
-const VER='0.9.33';
+const VER='0.9.34';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -192,7 +192,7 @@ function demoSeed(){
    {id:'d_mgr',name:'Rakib (manager)',role:'manager',pinH:'pbk1$200000$76826b2f35454ed3fdd6a8f01cb42ba3$fe38f1cb18181eaef66442fb38b5d67c7a763ac1e2d4f80d5a4d60104eb05e45'},
    {id:'d_stf',name:'Sumon (staff)',role:'staff',pinH:'pbk1$200000$eb920ce9a30ed461564a03ff1960fb9e$e82d3d0ddf1c515908167b87c10e3708800ba26262f5ace9418d61935a9aa411'},
    {id:'d_stf2',name:'Priya (staff)',role:'staff',pinH:'pbk1$200000$aa9b1a1ac8208e7d90f687b5c6370ed1$b2fb771ef6dcabae5cdc15da214f082e0342db9e11c1f507a68a8fa08f019830'}]};
- D.settings.dbId='demo';
+ D.settings.dbId='demo';D.settings.demoV=VER;D.settings.seedDay=today();
  M.forEach((r,i)=>{const it={id:'dm'+i,name:r[0],salt:r[1],company:r[2],cat:r[3],zone:r[4],rack:r[5],gst:r[6],mrp:r[7],reorder:r[9],pack:r[10],packOk:true,hsn:HSN[r[3]]||'3004'};it.h1=h1Match(it).length>0;if(i%4==0)it.bc='890'+String(1000000000+i*7919).slice(0,10);D.items.push(it)});
  const SUP=['Malda Pharma Distributors','Chanchal Medical Agency','Sri Durga Drug House, English Bazar','Ma Tara Pharma, Malda','Bengal Medicos, Siliguri'];
  const DAYS=75,bat={},addB=(it,b,exp,q,ptr,mrp)=>{const k=it.id+'|'+b;if(bat[k]){bat[k].qty+=q}else bat[k]={id:'db'+Object.keys(bat).length,itemId:it.id,batch:b,exp,qty:q,ptr,cost:ptr,mrp}};
@@ -245,6 +245,7 @@ function demoSeed(){
  D.batches=Object.values(bat);
  persist()}
 
+if(DEMO&&D&&(!D.settings||D.settings.demoV!==VER||D.settings.seedDay!==today()))D=null; // demo refreshes itself: new version or new day = fresh sample data
 if(!D){if(DEMO)demoSeed();else seed()}
 if(!D.users){D.users=[{id:'u1',name:'Owner',role:'owner'}];save()}
 ['cpays','spays','sreturns','preturns','openings','cashes'].forEach(k=>D[k]=D[k]||[]);
