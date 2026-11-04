@@ -1,4 +1,4 @@
-const VER='0.9.29';
+const VER='0.9.30';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -705,6 +705,7 @@ const KINDS={opening:'openings',sale:'sales',purchase:'purchases',sreturn:'sretu
 const SHARED=['shop','addr','phone','gstin','dl','terms','paper','doctors'];
 const CAN={owner:k=>true,manager:k=>k!='opening',staff:k=>k=='sale'||k=='cpay'};
 var CL=DEMO?null:JSON.parse(localStorage.asmaCloud||'null'),SY={busy:false,last:'',err:'',t:0,again:false};
+setTimeout(()=>{try{if(CL&&CL.shop&&D&&D.purchases){const before=JSON.stringify(D.batches.map(x=>[x.itemId,x.batch,x.qty]));rebuild();if(JSON.stringify(D.batches.map(x=>[x.itemId,x.batch,x.qty]))!==before){save(1);if(ME&&typeof cur!='undefined'&&cur=='stock')go(cur)}}}catch(e){}},0);
 const clSave=()=>{if(!DEMO)localStorage.asmaCloud=JSON.stringify(CL)};
 const strip=o=>{const c={...o};delete c._s;delete c._d;return c};
 const pending=()=>Object.values(KINDS).reduce((a,k)=>a+(D[k]||[]).filter(x=>!x._s).length,0)+(CL&&CL.role!='staff'?D.items.filter(i=>i._d).length:0);
@@ -773,7 +774,7 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
   if(changed){rebuild();if(D.settings.series){const mx=Math.max(0,...D.sales.filter(x=>(x.ser||'')==D.settings.series).map(x=>+x.no||0));if(mx>=D.settings.billNo)D.settings.billNo=mx+1}}
   SY.err=errs.join(' · ');SY.last=new Date().toTimeString().slice(0,5);save(1);
   if(changed){if(!ME)pLogin();else if(['stock','expiry','order','reports','dues','returns','search','h1'].includes(cur)&&!document.getElementById('nn')&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))go(cur)}
- }catch(e){SY.err=e.message;save(1)}finally{SY.busy=false;whoUI();if(cur=='cloud'&&$('#clst'))$('#clst').innerHTML=clStatus();if(SY.again){SY.again=false;syncSoon()}}}
+ }catch(e){SY.err=e.message;if(changed){try{rebuild()}catch(_){}}save(1);if(changed&&ME&&['stock','expiry','order','reports','dues','search'].includes(cur)&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))go(cur)}finally{SY.busy=false;whoUI();if(cur=='cloud'&&$('#clst'))$('#clst').innerHTML=clStatus();if(SY.again){SY.again=false;syncSoon()}}}
 function clStatus(){if(!CL||!CL.at)return'<span class=mut>Not connected</span>';return`Signed in as <b>${esc(CL.email)}</b>${CL.shop?` · shop <b>${esc(CL.shopName||'')}</b> · cloud role <b>${CL.role}</b> · counter <b>${esc(D.settings.series||'-')}</b><br>Last sync: ${SY.last||'-'} · waiting to upload: ${pending()}${(D.rejected||[]).length?` · <span class=red>not allowed, kept aside: ${D.rejected.length}</span>`:''}${SY.err?`<br><span class=red>⚠ ${esc(SY.err)}</span>`:''}`:''}`}
 const CLOUD_DEF={url:'https://oiowfuqtmygebcojnfty.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pb3dmdXF0bXlnZWJjb2puZnR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjU5OTQsImV4cCI6MjEwODcwMTk5NH0.TXMhqJGfvGog-Z78_js6ZwtlDzgPV_hfw_WWnh_bK3U'};
 function pCloud(){if(DEMO){$('#main').innerHTML=`<div class=card><h3>☁️ Cloud sync</h3><p>Cloud sync is <b>off in the demo</b>. Demo data stays only in this browser. In a real shop every counter (PC / laptop / phone) shares one live stock through the cloud and keeps working offline.</p></div>`+DEV();return}const c=CL||{};
