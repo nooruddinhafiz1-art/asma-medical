@@ -1,4 +1,4 @@
-const VER='0.9.37';
+const VER='0.9.38';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -340,6 +340,7 @@ function find(q){q=q.trim().toLowerCase();if(!q)return[];const b=byBc(q);if(b)re
 const P=[['search','🔍','Search'],['bill','🧾','New Bill'],['purchase','📦','Purchase'],['stock','💊','Stock'],['expiry','⏰','Expiry'],['order','📝','Order List'],['returns','↩️','Returns'],['dues','💰','Dues'],['reports','📈','Reports'],['h1','℞','H1 Register'],['cloud','☁️','Sync'],['settings','⚙️','Settings'],['help','❓','Help']];
 let cur='search';
 function nav(){if(!ME)return;$('#nav').innerHTML=P.filter(p=>ACL[eRole()].includes(p[0])).map(p=>`<button class="${p[0]==cur?'a':''}" onclick="go('${p[0]}')">${p[1]} ${t(p[2])}</button>`).join('')}
+function reGo(){if(document.getElementById('nn')||(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))return;const y=window.scrollY;go(cur);window.scrollTo(0,y)}
 function go(p){if(SY.kick&&!['bill','purchase'].includes(p)){SY.kick=0;ME=null;sessionStorage.removeItem(UK);sessSet(null)}if(!ME)return pLogin();if(ME)sessSet(ME.id);if(!ACL[eRole()].includes(p))p=ACL[eRole()][0];cur=p;nav();({search:pSearch,bill:pBill,purchase:pPurchase,stock:pStock,expiry:pExpiry,order:pOrder,reports:pReports,settings:pSettings,help:pHelp,returns:pReturns,dues:pDues,cloud:pCloud,h1:pH1})[p]();window.scrollTo(0,0)}
 function netUI(){const o=navigator.onLine;$('#net').className='pill '+(o?'on':'off');$('#net').textContent=o?'● Online':'● Offline – saved on this computer';$('#dev').textContent='🖥 '+D.settings.device}
 addEventListener('online',netUI);addEventListener('offline',netUI);
@@ -709,8 +710,9 @@ const KINDS={opening:'openings',sale:'sales',purchase:'purchases',sreturn:'sretu
 const SHARED=['shop','addr','phone','gstin','dl','terms','paper','doctors'];
 const CAN={owner:k=>true,manager:k=>k!='opening',staff:k=>k=='sale'||k=='cpay'};
 var CL=DEMO?null:JSON.parse(localStorage.asmaCloud||'null'),SY={busy:false,last:'',err:'',t:0,again:false};
-setTimeout(()=>{try{if(CL&&CL.shop&&D&&D.purchases){const before=JSON.stringify(D.batches.map(x=>[x.itemId,x.batch,x.qty]));rebuild();if(JSON.stringify(D.batches.map(x=>[x.itemId,x.batch,x.qty]))!==before){save(1);if(ME&&typeof cur!='undefined'&&cur=='stock')go(cur)}}}catch(e){}},0);
+setTimeout(()=>{try{if(CL&&CL.shop&&D&&D.purchases){const before=JSON.stringify(D.batches.map(x=>[x.itemId,x.batch,x.qty]));rebuild();if(JSON.stringify(D.batches.map(x=>[x.itemId,x.batch,x.qty]))!==before){save(1);if(ME&&typeof cur!='undefined'&&cur=='stock')reGo()}}}catch(e){}},0);
 const clSave=()=>{if(!DEMO)localStorage.asmaCloud=JSON.stringify(CL)};
+const cj=o=>JSON.stringify(o,(k,v)=>v&&typeof v=='object'&&!Array.isArray(v)?Object.keys(v).sort().reduce((a,x)=>(a[x]=v[x],a),{}):v);
 const strip=o=>{const c={...o};delete c._s;delete c._d;return c};
 const pending=()=>Object.values(KINDS).reduce((a,k)=>a+(D[k]||[]).filter(x=>!x._s).length,0)+(CL&&CL.role!='staff'?D.items.filter(i=>i._d).length:0);
 function syncPill(){if(!CL||!CL.shop)return'';const p=pending();return`<span class=pill style="background:${SY.err?'#fde8e8':p?'#fff8e1':'#e7f6ec'};color:#333" title="${esc(SY.err)}">☁ ${SY.err?(SY.err=='offline'?'offline':'sync problem'):p?p+' to upload':'synced '+SY.last}</span>`}
@@ -724,8 +726,8 @@ async function api(path,opt={},_re){if(!CL.at||Date.now()>CL.exp)await clAuth({r
   if(!_re&&(r.status==401||/jwt|token/i.test(m))&&CL.rt){try{await clAuth({refresh_token:CL.rt},'refresh_token')}catch(e){throw new Error('Cloud sign-in ran out ('+e.message+'). Sync page: Disconnect, then Sign in again.')}return api(path,opt,1)}
   throw new Error(m)}return j}
 const rpc=(f,b)=>api('/rest/v1/rpc/'+f,{method:'POST',body:JSON.stringify(b)});
-const sharedOf=()=>{const o={};SHARED.forEach(k=>o[k]=D.settings[k]??null);return JSON.stringify({s:o})};
-const usersOf=()=>JSON.stringify({u:D.users.map(u=>({...u})).sort((a,b)=>a.id<b.id?-1:1),r:D.settings.recH||null});
+const sharedOf=()=>{const o={};SHARED.forEach(k=>o[k]=D.settings[k]??null);return cj({s:o})};
+const usersOf=()=>cj({u:D.users.map(u=>({...u})).sort((a,b)=>a.id<b.id?-1:1),r:D.settings.recH||null});
 function rebuild(){const bm={},key=(i,b)=>i+'|'+b,get=l=>bm[key(l.itemId,l.batch)]||(bm[key(l.itemId,l.batch)]={id:uid(),itemId:l.itemId,batch:l.batch,exp:l.exp,qty:0,ptr:l.ptr||0,cost:l.cost??l.ptr??0,mrp:l.mrp||0});
  D.openings.forEach(o=>o.batches.forEach(b=>{const x=get(b);x.qty=r2(x.qty+b.qty);x.exp=b.exp;x.ptr=b.ptr;x.cost=b.cost??b.ptr;x.mrp=b.mrp}));
  const live=a=>a.filter(x=>!x.hist);
@@ -764,11 +766,11 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
   for(let i=0;i<miss.length;i+=50){const got=await api(`/rest/v1/entries?select=seq,id,kind,data&shop_id=eq.${sh}&id=in.(${miss.slice(i,i+50).map(encodeURIComponent).join(',')})`);got.forEach(e=>{if(take(e))changed=true})}
   SY.full=true;
   const ir=await api(`/rest/v1/items?select=id,data,updated_at&shop_id=eq.${sh}&updated_at=gte.${encodeURIComponent(CL.icur||'1970-01-01T00:00:00Z')}&order=updated_at.asc`);
-  for(const e of ir){const k=D.items.findIndex(i=>i.id==e.id);if(e.data&&e.data.del){if(k>=0&&!D.items[k]._d){D.items.splice(k,1);changed=true}CL.icur=e.updated_at;continue}if(k<0){D.items.push(strip(e.data));changed=true}else if(!D.items[k]._d&&JSON.stringify(strip(D.items[k]))!=JSON.stringify(strip(e.data))){D.items[k]=strip(e.data);changed=true}CL.icur=e.updated_at}clSave();
+  for(const e of ir){const k=D.items.findIndex(i=>i.id==e.id);if(e.data&&e.data.del){if(k>=0&&!D.items[k]._d){D.items.splice(k,1);changed=true}CL.icur=e.updated_at;continue}if(k<0){D.items.push(strip(e.data));changed=true}else if(!D.items[k]._d&&cj(strip(D.items[k]))!=cj(strip(e.data))){D.items[k]=strip(e.data);changed=true}CL.icur=e.updated_at}clSave();
   // 3. shop settings + PIN users (the owner's computer is the source)
   const shop=((await api(`/rest/v1/shops?select=name,settings&id=eq.${sh}`))||[])[0];const loc=sharedOf();
   if(CL.role=='owner'&&!CL.pull&&loc!==CL.setH){await api(`/rest/v1/shops?id=eq.${sh}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({settings:JSON.parse(loc)})});CL.setH=loc}
-  else if(shop&&shop.settings&&shop.settings.s){const rem=JSON.stringify({s:shop.settings.s});if(rem!==loc){Object.assign(D.settings,shop.settings.s);changed=true}CL.setH=sharedOf()}
+  else if(shop&&shop.settings&&shop.settings.s){const rem=cj({s:shop.settings.s});if(rem!==loc){Object.assign(D.settings,shop.settings.s);changed=true}CL.setH=sharedOf()}
   const lu=usersOf();
   if(CL.role=='owner'&&!CL.pull&&lu!==CL.usH){const rows=D.users.map(u=>({shop_id:sh,id:u.id,role:u.role,data:u})).concat([{shop_id:sh,id:'__rec',role:'owner',data:{recH:D.settings.recH||null}}]);
    await api('/rest/v1/shop_users?on_conflict=shop_id,id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(rows)});
@@ -780,8 +782,8 @@ async function sync(){if(!CL||!CL.shop)return;if(SY.busy){SY.again=true;return}i
   clSave();
   if(changed){rebuild();if(D.settings.series){const mx=Math.max(0,...D.sales.filter(x=>(x.ser||'')==D.settings.series).map(x=>+x.no||0));if(mx>=D.settings.billNo)D.settings.billNo=mx+1}}
   SY.err=errs.join(' · ');SY.last=new Date().toTimeString().slice(0,5);save(1);
-  if(changed){if(!ME)pLogin();else if(['stock','expiry','order','reports','dues','returns','search','h1'].includes(cur)&&!document.getElementById('nn')&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))go(cur)}
- }catch(e){SY.err=e.message;if(changed){try{rebuild()}catch(_){}}save(1);if(changed&&ME&&['stock','expiry','order','reports','dues','search'].includes(cur)&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))go(cur)}finally{SY.busy=false;whoUI();if(cur=='cloud'&&$('#clst'))$('#clst').innerHTML=clStatus();if(SY.again){SY.again=false;syncSoon()}}}
+  if(changed){if(!ME)pLogin();else if(['stock','expiry','order','reports','dues','returns','search','h1'].includes(cur)&&!document.getElementById('nn')&&!(document.activeElement&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)))reGo()}
+ }catch(e){SY.err=e.message;if(changed){try{rebuild()}catch(_){}}save(1);if(changed&&ME&&['stock','expiry','order','reports','dues','search'].includes(cur))reGo()}finally{SY.busy=false;whoUI();if(cur=='cloud'&&$('#clst'))$('#clst').innerHTML=clStatus();if(SY.again){SY.again=false;syncSoon()}}}
 function clStatus(){if(!CL||!CL.at)return'<span class=mut>Not connected</span>';return`Signed in as <b>${esc(CL.email)}</b>${CL.shop?` · shop <b>${esc(CL.shopName||'')}</b> · cloud role <b>${CL.role}</b> · counter <b>${esc(D.settings.series||'-')}</b><br>Last sync: ${SY.last||'-'} · waiting to upload: ${pending()}${(D.rejected||[]).length?` · <span class=red>not allowed, kept aside: ${D.rejected.length}</span>`:''}${SY.err?`<br><span class=red>⚠ ${esc(SY.err)}</span>`:''}`:''}`}
 const CLOUD_DEF={url:'https://oiowfuqtmygebcojnfty.supabase.co',key:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9pb3dmdXF0bXlnZWJjb2puZnR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxMjU5OTQsImV4cCI6MjEwODcwMTk5NH0.TXMhqJGfvGog-Z78_js6ZwtlDzgPV_hfw_WWnh_bK3U'};
 function pCloud(){if(DEMO){$('#main').innerHTML=`<div class=card><h3>☁️ Cloud sync</h3><p>Cloud sync is <b>off in the demo</b>. Demo data stays only in this browser. In a real shop every counter (PC / laptop / phone) shares one live stock through the cloud and keeps working offline.</p></div>`+DEV();return}const c=CL||{};
