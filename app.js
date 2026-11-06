@@ -1,4 +1,4 @@
-const VER='0.9.43';
+const VER='0.9.44';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -328,7 +328,8 @@ const qWords=q=>nz(q).split(' ').filter(Boolean).map(w=>({tab:'tablet',tabs:'tab
 function wMatch(hay,ws){const h=' '+hay+' ',hj=hay.replace(/ /g,'');return ws.every(w=>h.includes(' '+w)||(w.length>=4&&hj.includes(w)))}
 const mRow=j=>({name:MS.N[j],company:MS.C[MS.CI[j]]||'',salt:MS.S[MS.SI[j]]||'',pack:MS.PK[j],packLabel:MS.PL[j]});
 // name search in the master list (starts-with first, then contains), skipping names the shop already has
-function mFind(q,n=8){if(!MS)return[];const ws=qWords(q);if(nz(q).replace(/ /g,'').length<3||!ws.length)return[];const have=new Set(D.items.map(i=>i.name.toLowerCase()));
+function mFind(q,n=8){const r=mFind0(q,n);if(r.length)return r;const F=/\b(tab|tabs|tablet|tablets|cap|caps|capsule|capsules|syp|syr|syrup|susp|suspension|inj|injection|drop|drops|softgel|sachet|powder)\b/gi,q2=String(q||'').replace(F,' ').trim();return q2&&q2!=String(q).trim()?mFind0(q2,n):r}
+function mFind0(q,n=8){if(!MS)return[];const ws=qWords(q);if(nz(q).replace(/ /g,'').length<3||!ws.length)return[];const have=new Set(D.items.map(i=>i.name.toLowerCase()));
  if(!MS.NZ){MS.NZ=MS.LO.map(nz);MS.CZ=MS.C.map(nz)}if(!MS.SZ)MS.SZ=MS.S.map(nz);
  const qj=ws.join(' '),a=[],b=[],c=[],d=[];const sSet=new Set();if(nz(q).length>=4)MS.SZ.forEach((sz,k)=>{if(wMatch(sz,ws))sSet.add(k)});
  // company words: medicines of a company whose name matches the first word(s), e.g. "cipla", "sun pharma", "alkem pan"
