@@ -1,4 +1,4 @@
-const VER='0.9.48';
+const VER='0.9.49';
 const DEMO=!!globalThis.__DEMO,SK=DEMO?'asmaDemo':'asma',UK=DEMO?'duid':'uid';
 // ASMA MEDICAL – Pharmacy Software (Demo v0.5, see VER) · Software by UltraAccounting, 7602292599
 // Offline-first: all data saved on this device (localStorage). Online sync (Supabase) comes in the full version.
@@ -425,7 +425,9 @@ function bh1Draw(){const el=$('#bh1');if(!el)return;const h=bH1(),k=h?'1':'0';if
  ['#bc','#bdr'].forEach(s=>{const x=$(s);if(x&&x.style)x.style.borderColor=h?'#c62828':''})}
 function h1Nav(e,nx){if(e.key!='Enter')return;e.preventDefault();if(nx)return $(nx).focus();const ms=h1Miss();if(ms.length)return $(ms[0][0]).focus();if(B.h1m!=null)return bSave(B.h1m);$('#bi').focus()}
 // last-used doctors (from saved bills, newest first) for quick pick
-function drList(){const m=new Map();(D.settings.doctors||[]).filter(d=>d.on!==false).forEach(d=>{const k=d.name.trim().toLowerCase();if(k&&!m.has(k))m.set(k,{dr:d.name.trim(),dadr:[d.deg,d.reg?'Reg. '+d.reg:'',d.addr].filter(Boolean).join(', ')})});for(let i=D.sales.length-1;i>=0&&m.size<40;i--){const s=D.sales[i],k=String(s.dr||'').trim().toLowerCase();if(k&&!m.has(k))m.set(k,{dr:String(s.dr).trim(),dadr:String(s.dadr||'').trim()});else if(k&&!m.get(k).dadr&&s.dadr)m.get(k).dadr=String(s.dadr).trim()}return[...m.values()]}
+function drK(n){return String(n||'').toLowerCase().replace(/^\s*dr\b\.?/,'').replace(/[^a-z]/g,'')}
+function drSame(a,b){if(!a||!b)return false;if(a==b)return true;const[x,y]=a.length<b.length?[a,b]:[b,a];return x.length>=5&&y.startsWith(x)&&y.length-x.length<=2}
+function drList(){const m=new Map();(D.settings.doctors||[]).filter(d=>d.on!==false).forEach(d=>{const k=drK(d.name);if(k&&!m.has(k))m.set(k,{dr:d.name.trim(),dadr:[d.deg,d.reg?'Reg. '+d.reg:'',d.addr].filter(Boolean).join(', ')})});for(let i=D.sales.length-1;i>=0&&m.size<40;i--){const s=D.sales[i];let k=drK(s.dr);if(k&&!m.has(k)){const hit=[...m.keys()].find(x=>drSame(x,k));if(hit)k=hit}if(k&&!m.has(k))m.set(k,{dr:String(s.dr).trim(),dadr:String(s.dadr||'').trim()});else if(k&&!m.get(k).dadr&&s.dadr)m.get(k).dadr=String(s.dadr).trim()}return[...m.values()]}
 // custom suggestion list (Android phones do not show <datalist> reliably)
 let SG=null;
 function sg(inp,items,pick){let box=document.getElementById('sgbox');if(!box){box=document.createElement('div');box.id='sgbox';box.style.cssText='position:absolute;z-index:9999;background:#fff;border:2px solid #2e7d32;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.25);max-height:280px;overflow:auto;font-size:15px;color:#111';document.body.appendChild(box);box.addEventListener('pointerdown',e=>{const d=e.target.closest('[data-k]');if(!d||!SG)return;e.preventDefault();sgDo(+d.dataset.k)})}
